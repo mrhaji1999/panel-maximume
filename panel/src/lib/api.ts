@@ -32,7 +32,7 @@ const sanitizeUrl = (url: string) => url.replace(/\/?$/, '')
 
 const resolveApiBaseUrl = (): string => {
   const envBaseUrl = import.meta.env.VITE_API_BASE_URL
-  const allowCrossOrigin = import.meta.env.VITE_API_ALLOW_CROSS_ORIGIN === 'true'
+  const allowCrossOrigin = import.meta.env.VITE_API_ALLOW_CROSS_ORIGIN !== 'false'
 
   const buildSameOriginUrl = () => {
     if (typeof window !== 'undefined' && window.location?.origin) {
@@ -53,13 +53,15 @@ const resolveApiBaseUrl = (): string => {
       // request when the configured host differs from the one serving the frontend.
       // This prevents browser CORS rejections when the API lives under the same domain
       // as the panel but the environment configuration still points to an old host.
-      if (
-        typeof window !== 'undefined' &&
-        import.meta.env.PROD &&
-        !allowCrossOrigin &&
-        parsedEnvUrl.origin !== window.location.origin
-      ) {
-        return sanitizeUrl(`${window.location.origin}${normalizedPath}`)
+      if (typeof window !== 'undefined' && import.meta.env.PROD) {
+        if (!allowCrossOrigin && parsedEnvUrl.origin !== window.location.origin) {
+          if (import.meta.env.DEV !== true) {
+            console.info(
+              '[api] Falling back to same-origin API base URL because cross-origin access is disabled.'
+            )
+          }
+          return sanitizeUrl(`${window.location.origin}${normalizedPath}`)
+        }
       }
 
       return sanitizeUrl(`${parsedEnvUrl.origin}${normalizedPath}`)
