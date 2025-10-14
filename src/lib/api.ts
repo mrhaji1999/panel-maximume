@@ -26,7 +26,14 @@ import {
 } from '@/types'
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost/wp-json/user-cards-bridge/v1'
+const normalizeBaseUrl = (value: string) => value.replace(/\/$/, '')
+
+const resolveDefaultBaseUrl = () =>
+  `${normalizeBaseUrl('https://maximum.stoor.ir')}/wp-json/user-cards-bridge/v1`
+
+const API_BASE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_API_BASE_URL || resolveDefaultBaseUrl()
+)
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
