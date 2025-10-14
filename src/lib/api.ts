@@ -26,7 +26,53 @@ import {
 } from '@/types'
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost/wp-json/user-cards-bridge/v1'
+const DEFAULT_API_PATH = '/wp-json/user-cards-bridge/v1'
+
+const sanitizeUrl = (url: string) => url.replace(/\/?$/, '')
+
+const resolveApiBaseUrl = (): string => {
+  const envBaseUrl = import.meta.env.VITE_API_BASE_URL
+  const allowCrossOrigin = import.meta.env.VITE_API_ALLOW_CROSS_ORIGIN === 'true'
+
+  const buildSameOriginUrl = () => {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}${DEFAULT_API_PATH}`
+    }
+
+    return `http://localhost${DEFAULT_API_PATH}`
+  }
+
+  if (envBaseUrl) {
+    try {
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+      const parsedEnvUrl = new URL(envBaseUrl, currentOrigin)
+      const normalizedPath =
+        sanitizeUrl(parsedEnvUrl.pathname || DEFAULT_API_PATH) || DEFAULT_API_PATH
+
+      // In production deployments we want to automatically fall back to a same-origin
+      // request when the configured host differs from the one serving the frontend.
+      // This prevents browser CORS rejections when the API lives under the same domain
+      // as the panel but the environment configuration still points to an old host.
+      if (
+        typeof window !== 'undefined' &&
+        import.meta.env.PROD &&
+        !allowCrossOrigin &&
+        parsedEnvUrl.origin !== window.location.origin
+      ) {
+        return sanitizeUrl(`${window.location.origin}${normalizedPath}`)
+      }
+
+      return sanitizeUrl(`${parsedEnvUrl.origin}${normalizedPath}`)
+    } catch (error) {
+      console.warn('Invalid VITE_API_BASE_URL provided, falling back to same-origin API path.', error)
+      return sanitizeUrl(buildSameOriginUrl())
+    }
+  }
+
+  return sanitizeUrl(buildSameOriginUrl())
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
