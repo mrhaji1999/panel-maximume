@@ -165,7 +165,10 @@ class AjaxHandlers {
         }
         
         // Handle CORS origins
-        $cors_origins = array_map('sanitize_text_field', $_POST['ucb_cors_origins'] ?? []);
+        $cors_origins_input = $_POST['ucb_cors_origins'] ?? [];
+        $cors_origins = array_values(array_unique(array_filter(array_map(function($origin) {
+            return Security::sanitize_origin(sanitize_text_field($origin));
+        }, (array) $cors_origins_input))));
         update_option('ucb_cors_allowed_origins', $cors_origins);
         
         // Handle webhook secret

@@ -35,26 +35,85 @@ class Security {
             return $served;
         }
 
-        $allowed_origins = (array) get_option('ucb_cors_allowed_origins', []);
-        $origin = isset($_SERVER['HTTP_ORIGIN']) ? wp_unslash($_SERVER['HTTP_ORIGIN']) : '';
+        $allowed_origins = array_values(array_filter(array_map([self::class, 'sanitize_origin'], (array) get_option('ucb_cors_allowed_origins', []))));
+        $raw_origin = isset($_SERVER['HTTP_ORIGIN']) ? wp_unslash($_SERVER['HTTP_ORIGIN']) : '';
+        $normalized_origin = self::sanitize_origin($raw_origin);
 
-        if ($origin && in_array($origin, $allowed_origins, true)) {
-            header('Access-Control-Allow-Origin: ' . esc_url_raw($origin));
-            header('Access-Control-Allow-Credentials: true');
+        $allow_all = empty($allowed_origins);
+        $origin_is_allowed = $normalized_origin && in_array($normalized_origin, $allowed_origins, true);
+        $effective_origin = '';
+        $allow_credentials = false;
+
+        if ($allow_all) {
+            $effective_origin = $normalized_origin ?: '*';
+        } elseif ($origin_is_allowed) {
+            $effective_origin = $normalized_origin;
+            $allow_credentials = true;
         }
 
-        header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce');
+        if ($effective_origin) {
+            $this->output_cors_headers($effective_origin, $allow_credentials);
+        }
 
         if ('OPTIONS' === $request->get_method()) {
-            $server->send_header('Access-Control-Allow-Origin', $origin ?: '*');
+            if ($effective_origin) {
+                $server->send_header('Access-Control-Allow-Origin', '*' === $effective_origin ? '*' : esc_url_raw($effective_origin));
+                if ($allow_credentials) {
+                    $server->send_header('Access-Control-Allow-Credentials', 'true');
+                }
+                if ('*' !== $effective_origin) {
+                    $server->send_header('Vary', 'Origin');
+                }
+            }
             $server->send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-            $server->send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-WP-Nonce');
+            $server->send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-WP-Nonce, X-Requested-With');
             $server->send_header('Access-Control-Max-Age', '86400');
             $served = true;
         }
 
         return $served;
+    }
+
+    /**
+     * Normalize and sanitize an origin string for comparisons.
+     */
+    public static function sanitize_origin($origin): string {
+        if (empty($origin) || !is_string($origin)) {
+            return '';
+        }
+
+        $origin = trim($origin);
+        if ('*' === $origin) {
+            return '*';
+        }
+
+        $parsed = wp_parse_url($origin);
+        if (empty($parsed['scheme']) || empty($parsed['host'])) {
+            return '';
+        }
+
+        $scheme = strtolower($parsed['scheme']);
+        $host = strtolower($parsed['host']);
+        $port = isset($parsed['port']) ? ':' . (int) $parsed['port'] : '';
+
+        return untrailingslashit(sprintf('%s://%s%s', $scheme, $host, $port));
+    }
+
+    /**
+     * Output the base CORS headers for responses.
+     */
+    private function output_cors_headers(string $origin, bool $allow_credentials): void {
+        header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, X-Requested-With');
+        header('Access-Control-Allow-Origin: ' . ('*' === $origin ? '*' : esc_url_raw($origin)));
+
+        if ('*' !== $origin) {
+            header('Vary: Origin');
+        }
+
+        if ($allow_credentials) {
+            header('Access-Control-Allow-Credentials: true');
+        }
     }
 
     /**
