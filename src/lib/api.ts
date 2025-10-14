@@ -26,7 +26,19 @@ import {
 } from '@/types'
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost/wp-json/user-cards-bridge/v1'
+const resolveDefaultBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const { origin, hostname } = window.location
+
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return `${origin}/wp-json/user-cards-bridge/v1`
+    }
+  }
+
+  return 'http://localhost/wp-json/user-cards-bridge/v1'
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || resolveDefaultBaseUrl()
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
