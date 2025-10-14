@@ -1,0 +1,1125 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "User Cards Bridge API",
+    "description": "A comprehensive web service bridge plugin for managing user cards, roles, scheduling, and WooCommerce integration with SMS notifications.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "User Cards Bridge Support",
+      "email": "support@example.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "{baseUrl}/wp-json/user-cards-bridge/v1",
+      "description": "WordPress REST API endpoint",
+      "variables": {
+        "baseUrl": {
+          "default": "https://your-wordpress-site.com",
+          "description": "Your WordPress site URL"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Login user and get JWT token",
+        "description": "Authenticate user credentials and return JWT token for API access",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "Username or email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "User password"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": ["company_manager", "supervisor", "agent"],
+                    "description": "Optional role filter"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Register new user",
+        "description": "Register a new user with specified role",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "email", "password", "display_name", "role"],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "Username"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Email address"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "Password"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "description": "Display name"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": ["company_manager", "supervisor", "agent"],
+                    "description": "User role"
+                  },
+                  "supervisor_id": {
+                    "type": "integer",
+                    "description": "Supervisor ID (required for agents)"
+                  },
+                  "cards": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "Card IDs (for supervisors)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Registration failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "Get customers",
+        "description": "Retrieve customers with optional filters",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Items per page"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["no_answer", "canceled", "upsell", "normal", "upsell_pending", "upsell_paid"]
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "card_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter by card ID"
+          },
+          {
+            "name": "supervisor_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter by supervisor ID"
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter by agent ID"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search in customer data"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customers retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "Get single customer",
+        "description": "Retrieve detailed information about a specific customer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Customer ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}/status": {
+      "patch": {
+        "tags": ["Customers"],
+        "summary": "Update customer status",
+        "description": "Change customer status with optional reason",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Customer ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["no_answer", "canceled", "upsell", "normal", "upsell_pending", "upsell_paid"],
+                    "description": "New status"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Reason for status change"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}/upsell/init": {
+      "post": {
+        "tags": ["Upsell"],
+        "summary": "Initialize upsell process",
+        "description": "Start upsell process for customer with selected field",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Customer ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["card_id", "field_key"],
+                "properties": {
+                  "card_id": {
+                    "type": "integer",
+                    "description": "Card ID"
+                  },
+                  "field_key": {
+                    "type": "string",
+                    "description": "Selected field key for upsell"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upsell initiated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schedule/{supervisor_id}/{card_id}": {
+      "get": {
+        "tags": ["Schedule"],
+        "summary": "Get schedule matrix",
+        "description": "Retrieve schedule matrix for supervisor and card",
+        "parameters": [
+          {
+            "name": "supervisor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Supervisor ID"
+          },
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Card ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schedule retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Schedule"],
+        "summary": "Update schedule matrix",
+        "description": "Update schedule matrix for supervisor and card",
+        "parameters": [
+          {
+            "name": "supervisor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Supervisor ID"
+          },
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Card ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["matrix"],
+                "properties": {
+                  "matrix": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ScheduleSlot"
+                    },
+                    "description": "Schedule matrix data"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Schedule updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/availability/{card_id}": {
+      "get": {
+        "tags": ["Schedule"],
+        "summary": "Get available slots",
+        "description": "Get available time slots for a card",
+        "security": [],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Card ID"
+          },
+          {
+            "name": "supervisor_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter by supervisor ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available slots retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sms/send": {
+      "post": {
+        "tags": ["SMS"],
+        "summary": "Send SMS",
+        "description": "Send SMS message via Payamak Panel",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to", "body_id", "text"],
+                "properties": {
+                  "to": {
+                    "type": "string",
+                    "description": "Phone number"
+                  },
+                  "body_id": {
+                    "type": "string",
+                    "description": "SMS body ID"
+                  },
+                  "text": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Text variables for SMS"
+                  },
+                  "customer_id": {
+                    "type": "integer",
+                    "description": "Customer ID (optional)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SMS sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SMSResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "JWT token"
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              },
+              "role": {
+                "type": "string",
+                "enum": ["company_manager", "supervisor", "agent"]
+              }
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "User ID"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address"
+          },
+          "first_name": {
+            "type": "string",
+            "description": "First name"
+          },
+          "last_name": {
+            "type": "string",
+            "description": "Last name"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Display name"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["company_manager", "supervisor", "agent"],
+            "description": "User role"
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Customer ID"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address"
+          },
+          "first_name": {
+            "type": "string",
+            "description": "First name"
+          },
+          "last_name": {
+            "type": "string",
+            "description": "Last name"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Display name"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["no_answer", "canceled", "upsell", "normal", "upsell_pending", "upsell_paid"],
+            "description": "Customer status"
+          },
+          "assigned_supervisor": {
+            "type": "integer",
+            "description": "Assigned supervisor ID"
+          },
+          "assigned_supervisor_name": {
+            "type": "string",
+            "description": "Assigned supervisor name"
+          },
+          "assigned_agent": {
+            "type": "integer",
+            "description": "Assigned agent ID"
+          },
+          "assigned_agent_name": {
+            "type": "string",
+            "description": "Assigned agent name"
+          },
+          "card_id": {
+            "type": "integer",
+            "description": "Card ID"
+          },
+          "card_title": {
+            "type": "string",
+            "description": "Card title"
+          }
+        }
+      },
+      "CustomersResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Customer"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of customers"
+          },
+          "page": {
+            "type": "integer",
+            "description": "Current page"
+          },
+          "per_page": {
+            "type": "integer",
+            "description": "Items per page"
+          },
+          "total_pages": {
+            "type": "integer",
+            "description": "Total number of pages"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "CustomerDetailResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Customer"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "random_code": {
+                    "type": "string",
+                    "description": "Random code for normal status"
+                  },
+                  "status_logs": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/StatusLog"
+                    },
+                    "description": "Status change history"
+                  },
+                  "notes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CustomerNote"
+                    },
+                    "description": "Customer notes"
+                  }
+                }
+              }
+            ]
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "StatusLog": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Log ID"
+          },
+          "customer_id": {
+            "type": "integer",
+            "description": "Customer ID"
+          },
+          "old_status": {
+            "type": "string",
+            "description": "Previous status"
+          },
+          "new_status": {
+            "type": "string",
+            "description": "New status"
+          },
+          "changed_by": {
+            "type": "integer",
+            "description": "User ID who made the change"
+          },
+          "changed_by_name": {
+            "type": "string",
+            "description": "Name of user who made the change"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for change"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Change timestamp"
+          }
+        }
+      },
+      "CustomerNote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Note ID"
+          },
+          "note": {
+            "type": "string",
+            "description": "Note content"
+          },
+          "added_by": {
+            "type": "integer",
+            "description": "User ID who added the note"
+          },
+          "added_by_name": {
+            "type": "string",
+            "description": "Name of user who added the note"
+          },
+          "added_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Note timestamp"
+          }
+        }
+      },
+      "ScheduleSlot": {
+        "type": "object",
+        "required": ["weekday", "hour", "capacity"],
+        "properties": {
+          "weekday": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "description": "Day of week (0=Sunday, 6=Saturday)"
+          },
+          "hour": {
+            "type": "integer",
+            "minimum": 8,
+            "maximum": 18,
+            "description": "Hour (8-18)"
+          },
+          "capacity": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum capacity for this slot"
+          }
+        }
+      },
+      "ScheduleResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "supervisor_id": {
+                "type": "integer",
+                "description": "Supervisor ID"
+              },
+              "supervisor_name": {
+                "type": "string",
+                "description": "Supervisor name"
+              },
+              "card_id": {
+                "type": "integer",
+                "description": "Card ID"
+              },
+              "card_title": {
+                "type": "string",
+                "description": "Card title"
+              },
+              "matrix": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "weekday": {
+                      "type": "integer",
+                      "description": "Day of week"
+                    },
+                    "day_name": {
+                      "type": "string",
+                      "description": "Day name"
+                    },
+                    "hours": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "hour": {
+                            "type": "integer",
+                            "description": "Hour"
+                          },
+                          "capacity": {
+                            "type": "integer",
+                            "description": "Maximum capacity"
+                          },
+                          "reservations": {
+                            "type": "integer",
+                            "description": "Current reservations"
+                          },
+                          "available": {
+                            "type": "integer",
+                            "description": "Available slots"
+                          },
+                          "is_available": {
+                            "type": "boolean",
+                            "description": "Whether slot is available"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "AvailabilityResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "card_id": {
+                "type": "integer",
+                "description": "Card ID"
+              },
+              "card_title": {
+                "type": "string",
+                "description": "Card title"
+              },
+              "available_slots": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "weekday": {
+                      "type": "integer",
+                      "description": "Day of week"
+                    },
+                    "weekday_name": {
+                      "type": "string",
+                      "description": "Day name"
+                    },
+                    "hour": {
+                      "type": "integer",
+                      "description": "Hour"
+                    },
+                    "capacity": {
+                      "type": "integer",
+                      "description": "Maximum capacity"
+                    },
+                    "reservations": {
+                      "type": "integer",
+                      "description": "Current reservations"
+                    },
+                    "available": {
+                      "type": "integer",
+                      "description": "Available slots"
+                    },
+                    "time_display": {
+                      "type": "string",
+                      "description": "Formatted time display"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "UpsellResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "order_id": {
+                "type": "integer",
+                "description": "WooCommerce order ID"
+              },
+              "pay_link": {
+                "type": "string",
+                "format": "uri",
+                "description": "Payment link"
+              },
+              "amount": {
+                "type": "number",
+                "format": "float",
+                "description": "Order amount"
+              },
+              "field_title": {
+                "type": "string",
+                "description": "Selected field title"
+              },
+              "sms_result": {
+                "type": "object",
+                "description": "SMS sending result"
+              }
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "SMSResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "Success message"
+              },
+              "result": {
+                "type": "object",
+                "description": "SMS sending result"
+              }
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "Success message"
+              }
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Error code"
+              },
+              "message": {
+                "type": "string",
+                "description": "Error message"
+              },
+              "status": {
+                "type": "integer",
+                "description": "HTTP status code"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

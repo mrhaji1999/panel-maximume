@@ -1,0 +1,508 @@
+/**
+ * User Cards Bridge Admin Styles
+ */
+
+/* Dashboard Styles */
+.ucb-dashboard {
+    margin-top: 20px;
+}
+
+.ucb-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.ucb-stat-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.ucb-stat-card h3 {
+    margin: 0 0 15px 0;
+    color: #23282d;
+    font-size: 16px;
+}
+
+.ucb-stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ucb-stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.ucb-stat-item:last-child {
+    border-bottom: none;
+}
+
+.ucb-stat-label {
+    font-weight: 500;
+    color: #50575e;
+}
+
+.ucb-stat-value {
+    font-weight: 600;
+    font-size: 18px;
+}
+
+.ucb-stat-value.ucb-success {
+    color: #00a32a;
+}
+
+.ucb-stat-value.ucb-error {
+    color: #d63638;
+}
+
+/* Quick Actions */
+.ucb-quick-actions {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 30px;
+}
+
+.ucb-quick-actions h2 {
+    margin: 0 0 15px 0;
+    color: #23282d;
+}
+
+.ucb-action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Recent Activity */
+.ucb-recent-activity {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 30px;
+}
+
+.ucb-recent-activity h2 {
+    margin: 0 0 15px 0;
+    color: #23282d;
+}
+
+#ucb-activity-feed ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+#ucb-activity-feed li {
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+#ucb-activity-feed li:last-child {
+    border-bottom: none;
+}
+
+/* API Information */
+.ucb-api-info {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+}
+
+.ucb-api-info h2 {
+    margin: 0 0 15px 0;
+    color: #23282d;
+}
+
+.ucb-api-details p {
+    margin: 10px 0;
+}
+
+.ucb-api-details code {
+    background: #f6f7f7;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: Consolas, Monaco, monospace;
+}
+
+/* Settings Page Styles */
+.ucb-settings-tabs {
+    margin-top: 20px;
+}
+
+.ucb-settings-tabs .nav-tab-wrapper {
+    margin-bottom: 20px;
+}
+
+.tab-content {
+    display: none;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-top: none;
+    padding: 20px;
+    border-radius: 0 0 4px 4px;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.ucb-test-sms {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #f0f0f1;
+}
+
+#sms-test-result {
+    margin-top: 10px;
+}
+
+/* CORS Origins Management */
+#cors-origins-container {
+    margin-bottom: 10px;
+}
+
+.cors-origin-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.cors-origin-row input {
+    flex: 1;
+}
+
+/* API Documentation */
+.ucb-api-docs {
+    line-height: 1.6;
+}
+
+.ucb-api-docs h3 {
+    color: #23282d;
+    margin: 20px 0 10px 0;
+}
+
+.ucb-api-docs h4 {
+    color: #50575e;
+    margin: 15px 0 8px 0;
+}
+
+.ucb-api-docs ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.ucb-api-docs li {
+    margin: 5px 0;
+}
+
+.ucb-api-docs code {
+    background: #f6f7f7;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 13px;
+}
+
+.ucb-api-docs pre {
+    background: #f6f7f7;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    border: 1px solid #e1e1e1;
+}
+
+.ucb-endpoints-list {
+    margin: 20px 0;
+}
+
+/* Logs Page Styles */
+.ucb-log-filters {
+    background: #fff;
+    padding: 15px;
+    margin: 20px 0;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+}
+
+.ucb-log-filters select,
+.ucb-log-filters input[type="submit"] {
+    margin-right: 10px;
+}
+
+.ucb-logs-container {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ucb-log-level {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.ucb-log-level-info {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.ucb-log-level-warning {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.ucb-log-level-error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.ucb-pagination {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.ucb-bulk-actions {
+    margin: 20px 0;
+}
+
+/* Modal Styles */
+.ucb-modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.ucb-modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 0;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 600px;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.ucb-modal-header {
+    padding: 15px;
+    background: #f1f1f1;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px 4px 0 0;
+}
+
+.ucb-modal-header h3 {
+    margin: 0;
+    color: #23282d;
+}
+
+.ucb-modal-close {
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #666;
+    line-height: 1;
+}
+
+.ucb-modal-close:hover {
+    color: #000;
+}
+
+.ucb-modal-body {
+    padding: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.ucb-modal-body pre {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 3px;
+    overflow-x: auto;
+    border: 1px solid #e1e1e1;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .ucb-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .ucb-action-buttons {
+        flex-direction: column;
+    }
+    
+    .ucb-action-buttons .button {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .cors-origin-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .cors-origin-row input {
+        margin-bottom: 5px;
+    }
+    
+    .ucb-modal-content {
+        width: 95%;
+        margin: 2% auto;
+    }
+}
+
+/* Loading States */
+.ucb-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.ucb-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #0073aa;
+    border-radius: 50%;
+    animation: ucb-spin 1s linear infinite;
+    margin-right: 10px;
+}
+
+@keyframes ucb-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Status Badges */
+.ucb-status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.ucb-status-badge.no-answer {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.ucb-status-badge.canceled {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.ucb-status-badge.upsell {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.ucb-status-badge.normal {
+    background: #d4edda;
+    color: #155724;
+}
+
+.ucb-status-badge.upsell-pending {
+    background: #ffeaa7;
+    color: #6c5ce7;
+}
+
+.ucb-status-badge.upsell-paid {
+    background: #e8d5f2;
+    color: #6f42c1;
+}
+
+/* Form Styles */
+.ucb-form-group {
+    margin-bottom: 20px;
+}
+
+.ucb-form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #23282d;
+}
+
+.ucb-form-group input,
+.ucb-form-group select,
+.ucb-form-group textarea {
+    width: 100%;
+    max-width: 400px;
+}
+
+.ucb-form-group .description {
+    margin-top: 5px;
+    color: #666;
+    font-size: 13px;
+}
+
+/* Button Styles */
+.ucb-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 1px solid #0073aa;
+    background: #0073aa;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.4;
+    transition: all 0.2s ease;
+}
+
+.ucb-btn:hover {
+    background: #005a87;
+    border-color: #005a87;
+    color: #fff;
+}
+
+.ucb-btn-secondary {
+    background: #f6f7f7;
+    border-color: #c3c4c7;
+    color: #50575e;
+}
+
+.ucb-btn-secondary:hover {
+    background: #f0f0f1;
+    border-color: #8c8f94;
+    color: #1d2327;
+}
+
+.ucb-btn-danger {
+    background: #d63638;
+    border-color: #d63638;
+}
+
+.ucb-btn-danger:hover {
+    background: #b32d2e;
+    border-color: #b32d2e;
+}

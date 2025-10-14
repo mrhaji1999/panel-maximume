@@ -1,0 +1,359 @@
+{
+  "info": {
+    "name": "User Cards Bridge API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "d4e0c3f2-9c2c-4d3a-815f-ucb-bridge"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://maximum.stoor.ir" },
+    { "key": "token", "value": "" },
+    { "key": "managerUsername", "value": "manager" },
+    { "key": "managerPassword", "value": "mrhaji78" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (get JWT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["wp-json","user-cards-bridge","v1","auth","login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{managerUsername}}\",\n  \"password\": \"{{managerPassword}}\",\n  \"role\": \"company_manager\"\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users & Roles",
+      "item": [
+        {
+          "name": "Managers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/managers",
+              "host": ["{{baseUrl}}"],
+              "path": ["wp-json","user-cards-bridge","v1","managers"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Supervisors",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/supervisors?page=1&per_page=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["wp-json","user-cards-bridge","v1","supervisors"],
+              "query": [
+                {"key":"page","value":"1"},
+                {"key":"per_page","value":"20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/agents?page=1&per_page=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["wp-json","user-cards-bridge","v1","agents"],
+              "query": [
+                {"key":"page","value":"1"},
+                {"key":"per_page","value":"20"}
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cards & Forms",
+      "item": [
+        {
+          "name": "Cards",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/cards?page=1&per_page=20",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","cards"],
+              "query":[{"key":"page","value":"1"},{"key":"per_page","value":"20"}] }
+          }
+        },
+        {
+          "name": "Card Fields (by ID)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/cards/{{cardId}}/fields",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","cards","{{cardId}}","fields"] }
+          }
+        },
+        {
+          "name": "Forms",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/forms?page=1&per_page=20",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","forms"],
+              "query":[{"key":"page","value":"1"},{"key":"per_page","value":"20"}] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Customers list",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/customers?page=1&per_page=20",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","customers"],
+              "query":[{"key":"page","value":"1"},{"key":"per_page","value":"20"}] }
+          }
+        },
+        {
+          "name": "Customer detail (by ID)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/customers/{{customerId}}",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","customers","{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Update status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/customers/{{customerId}}/status",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","customers","{{customerId}}","status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"normal\",\n  \"meta\": {}\n}" }
+          }
+        },
+        {
+          "name": "Add note",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/customers/{{customerId}}/notes",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","customers","{{customerId}}","notes"] },
+            "body": { "mode": "raw", "raw": "{\n  \"note\": \"Postman note\"\n}" }
+          }
+        },
+        {
+          "name": "Send normal code",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/customers/{{customerId}}/normal/send-code",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","customers","{{customerId}}","normal","send-code"] }
+          }
+        },
+        {
+          "name": "Upsell init",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/customers/{{customerId}}/upsell/init",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","customers","{{customerId}}","upsell","init"] },
+            "body": { "mode": "raw", "raw": "{\n  \"card_id\": {{cardId}},\n  \"field_key\": \"field_1\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Schedule & Availability",
+      "item": [
+        {
+          "name": "Get schedule",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/schedule/{{supervisorId}}/{{cardId}}",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","schedule","{{supervisorId}}","{{cardId}}"] }
+          }
+        },
+        {
+          "name": "Update schedule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/schedule/{{supervisorId}}/{{cardId}}",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","schedule","{{supervisorId}}","{{cardId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"matrix\": [\n    { \"weekday\": 0, \"hour\": 8, \"capacity\": 10 },\n    { \"weekday\": 0, \"hour\": 9, \"capacity\": 20 }\n  ]\n}" }
+          }
+        },
+        {
+          "name": "Availability",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/availability/{{cardId}}?supervisor_id={{supervisorId}}",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","availability","{{cardId}}"],
+              "query":[{"key":"supervisor_id","value":"{{supervisorId}}"}] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservations",
+      "item": [
+        {
+          "name": "List reservations",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/reservations?page=1&per_page=20",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","reservations"],
+              "query":[{"key":"page","value":"1"},{"key":"per_page","value":"20"}] }
+          }
+        },
+        {
+          "name": "Create reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/reservations",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","reservations"] },
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": {{customerId}},\n  \"card_id\": {{cardId}},\n  \"supervisor_id\": {{supervisorId}},\n  \"weekday\": 2,\n  \"hour\": \"10:00\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SMS",
+      "item": [
+        {
+          "name": "Send SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/sms/send",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","sms","send"] },
+            "body": { "mode": "raw", "raw": "{\n  \"to\": \"09120000000\",\n  \"bodyId\": 12345,\n  \"text\": [\"A\", \"B\"]\n}" }
+          }
+        },
+        {
+          "name": "SMS config test",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/sms/test",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","sms","test"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stats & Dashboard",
+      "item": [
+        {
+          "name": "SMS statistics (7 days)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/sms/statistics?days=7",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","sms","statistics"],
+              "query":[{"key":"days","value":"7"}] }
+          }
+        },
+        {
+          "name": "Dashboard summary",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/dashboard/summary?days=30&activity=10",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","dashboard","summary"],
+              "query":[{"key":"days","value":"30"},{"key":"activity","value":"10"}] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "WooCommerce payment webhook (example)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-WC-Webhook-Signature", "value": "<computed HMAC base64>" }
+            ],
+            "url": { "raw": "{{baseUrl}}/wp-json/user-cards-bridge/v1/webhooks/woocommerce/payment",
+              "host":["{{baseUrl}}"],
+              "path":["wp-json","user-cards-bridge","v1","webhooks","woocommerce","payment"] },
+            "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"status\": \"completed\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
