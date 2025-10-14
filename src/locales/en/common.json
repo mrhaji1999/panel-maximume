@@ -1,0 +1,89 @@
+{
+  "sidebar": {
+    "title": "Control Panel",
+    "logout": "Log out"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "supervisors": "Supervisors",
+    "agents": "Agents",
+    "myCards": "My Cards",
+    "myAgents": "My Agents",
+    "myCustomers": "My Customers",
+    "assignedCustomers": "Assigned Customers",
+    "forms": "Forms",
+    "customers": "Customers",
+    "schedule": "Schedule",
+    "reservations": "Reservations",
+    "sms": "SMS",
+    "settings": "Settings"
+  },
+  "header": {
+    "title": {
+      "default": "Control Panel"
+    },
+    "page": {
+      "dashboard": "Dashboard",
+      "supervisors": "Supervisors",
+      "agents": "Agents",
+      "myCards": "My Cards",
+      "myAgents": "My Agents",
+      "myCustomers": "My Customers",
+      "assignedCustomers": "Assigned Customers",
+      "forms": "Forms",
+      "customers": "Customers",
+      "schedule": "Schedule",
+      "reservations": "Reservations",
+      "sms": "SMS",
+      "settings": "Settings",
+      "profile": "Profile"
+    },
+    "restricted": {
+      "supervisor": "This section is only available to supervisors.",
+      "agent": "This section is only available to agents."
+    },
+    "notifications": {
+      "count": "{{count}}"
+    }
+  },
+  "roles": {
+    "company_manager": "Company Manager",
+    "supervisor": "Supervisor",
+    "agent": "Agent"
+  },
+  "actions": {
+    "previous": "Previous",
+    "next": "Next",
+    "searchAgents": "Search agents",
+    "searchCustomers": "Search customers",
+    "toggleLanguage": "FA",
+    "toggleLanguageFa": "EN"
+  },
+  "pages": {
+    "myAgents": {
+      "title": "My Agents",
+      "subtitle": "Agents assigned to your team",
+      "empty": "You do not have any active agents yet.",
+      "total": "{{count}} agents",
+      "error": "Failed to load agents"
+    },
+    "myCards": {
+      "title": "My Cards",
+      "subtitle": "Cards you manage as a supervisor",
+      "empty": "No cards have been assigned to you yet.",
+      "total": "{{count}} cards"
+    },
+    "myCustomers": {
+      "title": "My Customers",
+      "subtitle": "Customers currently assigned to you",
+      "empty": "You have no assigned customers.",
+      "total": "{{count}} customers"
+    },
+    "assignedCustomers": {
+      "title": "Assigned Customers",
+      "subtitle": "Customers you are responsible for",
+      "empty": "You do not have any assigned customers yet.",
+      "total": "{{count}} customers"
+    }
+  }
+}

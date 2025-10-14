@@ -1,0 +1,89 @@
+{
+  "sidebar": {
+    "title": "پنل مدیریت",
+    "logout": "خروج"
+  },
+  "nav": {
+    "dashboard": "داشبورد",
+    "supervisors": "سرپرست‌ها",
+    "agents": "کارشناس‌ها",
+    "myCards": "کارت‌های من",
+    "myAgents": "کارشناس‌های من",
+    "myCustomers": "مشتریان من",
+    "assignedCustomers": "مشتریان تخصیص‌یافته",
+    "forms": "فرم‌ها",
+    "customers": "مشتریان",
+    "schedule": "زمان‌بندی",
+    "reservations": "رزروها",
+    "sms": "پیامک‌ها",
+    "settings": "تنظیمات"
+  },
+  "header": {
+    "title": {
+      "default": "پنل مدیریت"
+    },
+    "page": {
+      "dashboard": "داشبورد",
+      "supervisors": "سرپرست‌ها",
+      "agents": "کارشناس‌ها",
+      "myCards": "کارت‌های من",
+      "myAgents": "کارشناس‌های من",
+      "myCustomers": "مشتریان من",
+      "assignedCustomers": "مشتریان تخصیص‌یافته",
+      "forms": "فرم‌ها",
+      "customers": "مشتریان",
+      "schedule": "زمان‌بندی",
+      "reservations": "رزروها",
+      "sms": "پیامک‌ها",
+      "settings": "تنظیمات",
+      "profile": "پروفایل"
+    },
+    "restricted": {
+      "supervisor": "این بخش فقط برای سرپرستان در دسترس است.",
+      "agent": "این بخش فقط برای کارشناسان در دسترس است."
+    },
+    "notifications": {
+      "count": "{{count}}"
+    }
+  },
+  "roles": {
+    "company_manager": "مدیر شرکت",
+    "supervisor": "سرپرست",
+    "agent": "کارشناس"
+  },
+  "actions": {
+    "previous": "قبلی",
+    "next": "بعدی",
+    "searchAgents": "جست‌وجو در کارشناسان",
+    "searchCustomers": "جست‌وجو در مشتریان",
+    "toggleLanguage": "EN",
+    "toggleLanguageFa": "FA"
+  },
+  "pages": {
+    "myAgents": {
+      "title": "کارشناس‌های من",
+      "subtitle": "کارشناسانی که زیرمجموعه شما هستند",
+      "empty": "هنوز کارشناس فعالی برای شما ثبت نشده است.",
+      "total": "{{count}} کارشناس",
+      "error": "خطا در بارگذاری کارشناسان"
+    },
+    "myCards": {
+      "title": "کارت‌های من",
+      "subtitle": "کارت‌هایی که به عنوان سرپرست مدیریت می‌کنید",
+      "empty": "هنوز کارتی به شما تخصیص داده نشده است.",
+      "total": "{{count}} کارت"
+    },
+    "myCustomers": {
+      "title": "مشتریان من",
+      "subtitle": "مشتریانی که به شما تخصیص داده شده‌اند",
+      "empty": "هیچ مشتری برای شما ثبت نشده است.",
+      "total": "{{count}} مشتری"
+    },
+    "assignedCustomers": {
+      "title": "مشتریان تخصیص‌یافته",
+      "subtitle": "مشتریانی که شما مسئول آن‌ها هستید",
+      "empty": "هنوز مشتری تخصیص‌یافته‌ای ندارید.",
+      "total": "{{count}} مشتری"
+    }
+  }
+}
