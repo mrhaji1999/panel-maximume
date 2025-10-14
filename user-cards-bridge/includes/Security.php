@@ -2,6 +2,7 @@
 
 namespace UCB;
 
+use UCB\Utils\Cors;
 use WP_Error;
 use WP_REST_Request;
 
@@ -35,19 +36,38 @@ class Security {
             return $served;
         }
 
-        $allowed_origins = (array) get_option('ucb_cors_allowed_origins', []);
+        $allowed_origins = Cors::sanitize_origins((array) get_option('ucb_cors_allowed_origins', []));
         $origin = isset($_SERVER['HTTP_ORIGIN']) ? wp_unslash($_SERVER['HTTP_ORIGIN']) : '';
+        $normalized_origin = Cors::normalize_origin($origin);
 
-        if ($origin && in_array($origin, $allowed_origins, true)) {
-            header('Access-Control-Allow-Origin: ' . esc_url_raw($origin));
-            header('Access-Control-Allow-Credentials: true');
+        $is_wildcard_allowed = in_array('*', $allowed_origins, true);
+        $matched_origin = $is_wildcard_allowed ? '*' : $normalized_origin;
+
+        if (!$is_wildcard_allowed && $normalized_origin && !in_array($normalized_origin, $allowed_origins, true)) {
+            $matched_origin = '';
+        }
+
+        if ($matched_origin) {
+            header('Vary: Origin');
+            header('Access-Control-Allow-Origin: ' . $matched_origin);
+
+            if ('*' !== $matched_origin) {
+                header('Access-Control-Allow-Credentials: true');
+            }
         }
 
         header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
         header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce');
 
         if ('OPTIONS' === $request->get_method()) {
-            $server->send_header('Access-Control-Allow-Origin', $origin ?: '*');
+            if ($matched_origin) {
+                $server->send_header('Access-Control-Allow-Origin', $matched_origin);
+
+                if ('*' !== $matched_origin) {
+                    $server->send_header('Access-Control-Allow-Credentials', 'true');
+                }
+            }
+
             $server->send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             $server->send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-WP-Nonce');
             $server->send_header('Access-Control-Max-Age', '86400');

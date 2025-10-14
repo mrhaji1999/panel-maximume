@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 import './i18n/config.ts'
+import './lib/registerMediaSpeedControls'
 
 // Create a client
 const queryClient = new QueryClient({

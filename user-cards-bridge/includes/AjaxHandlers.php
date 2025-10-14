@@ -2,6 +2,8 @@
 
 namespace UCB;
 
+use UCB\Utils\Cors;
+
 class AjaxHandlers {
     
     public function __construct() {
@@ -165,7 +167,7 @@ class AjaxHandlers {
         }
         
         // Handle CORS origins
-        $cors_origins = array_map('sanitize_text_field', $_POST['ucb_cors_origins'] ?? []);
+        $cors_origins = Cors::sanitize_origins($_POST['ucb_cors_origins'] ?? []);
         update_option('ucb_cors_allowed_origins', $cors_origins);
         
         // Handle webhook secret

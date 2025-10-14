@@ -3,6 +3,8 @@
  * Admin Settings Template
  */
 
+use UCB\Utils\Cors;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -16,7 +18,7 @@ if (isset($_POST['submit']) && wp_verify_nonce($_POST['ucb_settings_nonce'], 'uc
     update_option('ucb_sms_upsell_body_id', sanitize_text_field($_POST['ucb_sms_upsell_body_id']));
     
     // CORS Settings
-    $cors_origins = array_map('sanitize_text_field', $_POST['ucb_cors_origins'] ?? []);
+    $cors_origins = Cors::sanitize_origins($_POST['ucb_cors_origins'] ?? []);
     update_option('ucb_cors_allowed_origins', $cors_origins);
     
     // Other Settings
@@ -36,7 +38,7 @@ $sms_username = get_option('ucb_sms_username', '');
 $sms_password = get_option('ucb_sms_password', '');
 $sms_normal_body_id = get_option('ucb_sms_normal_body_id', '');
 $sms_upsell_body_id = get_option('ucb_sms_upsell_body_id', '');
-$cors_origins = get_option('ucb_cors_allowed_origins', []);
+$cors_origins = Cors::sanitize_origins((array) get_option('ucb_cors_allowed_origins', []));
 $payment_token_expiry = get_option('ucb_payment_token_expiry', 24);
 $log_retention_days = get_option('ucb_log_retention_days', 30);
 $webhook_secret = get_option('ucb_webhook_secret', '');
