@@ -31,10 +31,13 @@ class UC_Assets {
         wp_localize_script('uc-frontend', 'UC_Ajax', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('uc_ajax'),
+            'api_url' => esc_url_raw(rest_url('user-cards-bridge/v1/')),
             'i18n' => [
                 'invalidCode' => __('کد وارد شده نامعتبر است.', 'user-cards'),
                 'usedCode' => __('این کد قبلا استفاده شده است.', 'user-cards'),
                 'serverError' => __('خطایی رخ داد. مجدد تلاش کنید.', 'user-cards'),
+                'invalidDate' => __('تاریخ انتخابی نامعتبر است.', 'user-cards'),
+                'slotFull' => __('این ساعت برای این تاریخ تکمیل شده است.', 'user-cards'),
             ],
         ]);
         wp_enqueue_script('uc-frontend');

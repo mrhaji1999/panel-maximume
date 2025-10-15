@@ -58,24 +58,42 @@ class ScheduleService {
      *
      * @return array<int, array<string, int>>
      */
-    public function get_availability(int $card_id, int $supervisor_id): array {
+    public function get_availability(int $card_id, int $supervisor_id, ?string $date = null): array {
         $matrix = $this->get_matrix($supervisor_id, $card_id);
         $availability = [];
+        $target_weekday = null;
+
+        if ($date) {
+            $timestamp = strtotime($date . ' 00:00:00');
+            if (false !== $timestamp) {
+                // date('N') returns 1 (Mon) through 7 (Sun)
+                $target_weekday = (int) (function_exists('wp_date') ? \wp_date('N', $timestamp) : date('N', $timestamp));
+            }
+        }
 
         foreach ($matrix as $slot) {
             $weekday = (int) $slot['weekday'];
             $hour = (int) $slot['hour'];
-            $capacity = (int) $slot['capacity'];
+            $capacity = max(0, (int) $slot['capacity']);
+            $used = 0;
 
-            $reservations = $this->database->count_reservations_for_slot($card_id, $weekday, $hour);
+            if (null !== $target_weekday && $weekday !== $target_weekday) {
+                continue;
+            }
+
+            if ($date) {
+                $used = $this->database->count_reservations_for_slot_on_date($card_id, $date, $weekday, $hour);
+            }
+
+            $remaining = max(0, $capacity - $used);
 
             $availability[] = [
-                'weekday'    => $weekday,
-                'hour'       => $hour,
-                'capacity'   => $capacity,
-                'reserved'   => $reservations,
-                'available'  => max(0, $capacity - $reservations),
-                'is_open'    => $reservations < $capacity,
+                'weekday'   => $weekday,
+                'hour'      => $hour,
+                'capacity'  => $capacity,
+                'used'      => $used,
+                'remaining' => $remaining,
+                'is_full'   => $capacity > 0 ? $used >= $capacity : true,
             ];
         }
 

@@ -2,6 +2,8 @@
 
 namespace UCB;
 
+use UCB\Migrations\ReservationDateMigration;
+
 class Activator {
     
     public static function activate() {
@@ -49,12 +51,15 @@ class Activator {
             supervisor_id bigint(20) NOT NULL,
             slot_weekday tinyint(1) NOT NULL,
             slot_hour tinyint(2) NOT NULL,
+            reservation_date date NOT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY customer_id (customer_id),
             KEY card_id (card_id),
             KEY supervisor_id (supervisor_id),
-            KEY slot (slot_weekday, slot_hour)
+            KEY slot (slot_weekday, slot_hour),
+            KEY reservation_date (reservation_date),
+            KEY date_slot (reservation_date, slot_weekday, slot_hour)
         ) $charset_collate;";
         
         // Status logs table
@@ -135,6 +140,9 @@ class Activator {
         dbDelta($sql_sms_logs);
         dbDelta($sql_logs);
         dbDelta($sql_payment_tokens);
+
+        // Ensure schema upgrades also run during activation.
+        ReservationDateMigration::migrate();
     }
     
     private static function create_user_roles() {
