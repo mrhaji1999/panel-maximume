@@ -216,21 +216,43 @@ class Database {
     }
 
     /**
+     * Count reservations for a specific card, date, weekday and hour.
+     */
+    public function count_reservations_for_slot_on_date(int $card_id, string $date, int $weekday, int $hour): int {
+        $sql = $this->db->prepare(
+            "SELECT COUNT(*) FROM {$this->reservations_table()} WHERE card_id = %d AND reservation_date = %s AND slot_weekday = %d AND slot_hour = %d",
+            $card_id,
+            $date,
+            $weekday,
+            $hour
+        );
+
+        return (int) $this->db->get_var($sql);
+    }
+
+    /**
      * Create reservation entry.
      *
      * @param array<string, mixed> $data
      */
     public function create_reservation(array $data): int {
         $defaults = [
-            'customer_id'   => 0,
-            'card_id'       => 0,
-            'supervisor_id' => 0,
-            'slot_weekday'  => 0,
-            'slot_hour'     => 0,
-            'created_at'    => current_time('mysql'),
+            'customer_id'     => 0,
+            'card_id'         => 0,
+            'supervisor_id'   => 0,
+            'slot_weekday'    => 0,
+            'slot_hour'       => 0,
+            'reservation_date'=> null,
+            'created_at'      => current_time('mysql'),
         ];
 
         $payload = wp_parse_args($data, $defaults);
+
+        $payload['reservation_date'] = $payload['reservation_date'] ? sanitize_text_field($payload['reservation_date']) : null;
+
+        if (empty($payload['reservation_date'])) {
+            throw new \InvalidArgumentException('Reservation date is required.');
+        }
 
         $this->db->insert(
             $this->reservations_table(),
@@ -241,6 +263,7 @@ class Database {
                 '%d',
                 '%d',
                 '%d',
+                '%s',
                 '%s',
             ]
         );
@@ -271,6 +294,11 @@ class Database {
         if (!empty($filters['customer_id'])) {
             $where[] = 'customer_id = %d';
             $params[] = (int) $filters['customer_id'];
+        }
+
+        if (!empty($filters['reservation_date'])) {
+            $where[] = 'reservation_date = %s';
+            $params[] = sanitize_text_field($filters['reservation_date']);
         }
 
         $offset = max(0, ($page - 1) * $per_page);
@@ -314,8 +342,13 @@ class Database {
             $params[] = (int) $filters['customer_id'];
         }
 
+        if (!empty($filters['reservation_date'])) {
+            $where[] = 'reservation_date = %s';
+            $params[] = sanitize_text_field($filters['reservation_date']);
+        }
+
         if (!empty($filters['date'])) {
-            $where[] = 'DATE(created_at) = %s';
+            $where[] = 'reservation_date = %s';
             $params[] = sanitize_text_field($filters['date']);
         }
 

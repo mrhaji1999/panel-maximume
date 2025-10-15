@@ -21,35 +21,69 @@ class ReservationService {
     /**
      * Creates a reservation if slot is available.
      */
-    public function create(int $customer_id, int $card_id, int $supervisor_id, int $weekday, int $hour): array|WP_Error {
-        $schedule = new ScheduleService();
-        $availability = $schedule->get_availability($card_id, $supervisor_id);
+    public function create(int $customer_id, int $card_id, int $supervisor_id, string $reservation_date, int $hour): array|WP_Error {
+        $reservation_date = sanitize_text_field($reservation_date);
 
-        $matching = array_filter($availability, function ($slot) use ($weekday, $hour) {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $reservation_date)) {
+            return new WP_Error('ucb_invalid_date_format', __('Invalid reservation date format. Expected YYYY-MM-DD.', 'user-cards-bridge'), ['status' => 400]);
+        }
+
+        try {
+            $date_object = new \DateTimeImmutable($reservation_date, wp_timezone());
+        } catch (\Exception $exception) {
+            return new WP_Error('ucb_invalid_date', __('The provided reservation date is not valid.', 'user-cards-bridge'), ['status' => 400]);
+        }
+
+        $normalized_date = $date_object->format('Y-m-d');
+        $weekday = (int) $date_object->format('w');
+
+        $schedule = new ScheduleService();
+        $availability = $schedule->get_availability($card_id, $supervisor_id, $normalized_date);
+
+        $matching = array_filter($availability, static function ($slot) use ($weekday, $hour) {
             return (int) $slot['weekday'] === $weekday && (int) $slot['hour'] === $hour;
         });
 
         if (empty($matching)) {
-            return new WP_Error('ucb_slot_not_found', __('Slot not available.', 'user-cards-bridge'));
+            return new WP_Error('ucb_slot_not_found', __('Slot not available for the selected date.', 'user-cards-bridge'), ['status' => 404]);
         }
 
         $slot = current($matching);
+        $capacity = (int) ($slot['capacity'] ?? 0);
 
-        if (!$slot['is_open']) {
-            return new WP_Error('ucb_slot_full', __('Slot capacity reached.', 'user-cards-bridge'));
+        if ($capacity <= 0) {
+            return new WP_Error('ucb_slot_full', __('Slot capacity reached for the selected date.', 'user-cards-bridge'), ['status' => 409]);
+        }
+
+        $used = $this->database->count_reservations_for_slot_on_date($card_id, $normalized_date, $weekday, $hour);
+
+        if ($used >= $capacity) {
+            return new WP_Error('ucb_slot_full', __('Slot capacity reached for the selected date.', 'user-cards-bridge'), ['status' => 409]);
         }
 
         $reservation_id = $this->database->create_reservation([
-            'customer_id'   => $customer_id,
-            'card_id'       => $card_id,
-            'supervisor_id' => $supervisor_id,
-            'slot_weekday'  => $weekday,
-            'slot_hour'     => $hour,
+            'customer_id'     => $customer_id,
+            'card_id'         => $card_id,
+            'supervisor_id'   => $supervisor_id,
+            'slot_weekday'    => $weekday,
+            'slot_hour'       => $hour,
+            'reservation_date'=> $normalized_date,
         ]);
+
+        $final_used = $used + 1;
+        $remaining = max(0, $capacity - $final_used);
 
         return [
             'reservation_id' => $reservation_id,
-            'slot'           => $slot,
+            'slot'           => [
+                'weekday'   => $weekday,
+                'hour'      => $hour,
+                'capacity'  => $capacity,
+                'used'      => $final_used,
+                'remaining' => $remaining,
+                'is_full'   => $remaining <= 0,
+                'date'      => $normalized_date,
+            ],
         ];
     }
 
@@ -83,6 +117,21 @@ class ReservationService {
         $weekday = (int) ($row['slot_weekday'] ?? 0);
         $hour = (int) ($row['slot_hour'] ?? 0);
         $created_at = $row['created_at'] ?? current_time('mysql');
+        $reservation_date = isset($row['reservation_date']) ? sanitize_text_field($row['reservation_date']) : null;
+
+        $reservation_date_display = null;
+        $reservation_date_rfc3339 = null;
+
+        if ($reservation_date) {
+            try {
+                $date_object = new \DateTimeImmutable($reservation_date, wp_timezone());
+                $reservation_date_display = $date_object->format(get_option('date_format', 'Y-m-d'));
+                $reservation_date_rfc3339 = $date_object->format(DATE_RFC3339);
+            } catch (\Exception $exception) {
+                $reservation_date_display = $reservation_date;
+                $reservation_date_rfc3339 = $reservation_date . 'T00:00:00';
+            }
+        }
 
         $customer = $customer_id ? get_user_by('id', $customer_id) : null;
         $supervisor = $supervisor_id ? get_user_by('id', $supervisor_id) : null;
@@ -99,8 +148,11 @@ class ReservationService {
             'supervisor_name' => $supervisor ? $supervisor->display_name : null,
             'weekday' => $weekday,
             'hour' => $hour,
+            'reservation_date' => $reservation_date,
+            'reservation_date_display' => $reservation_date_display,
+            'reservation_date_rfc3339' => $reservation_date_rfc3339,
             'created_at' => mysql_to_rfc3339($created_at),
-            'time_display' => sprintf('%s %02d:00', $this->get_weekday_label($weekday), $hour),
+            'time_display' => trim(sprintf('%s %s %02d:00', $reservation_date_display ?: $reservation_date, $this->get_weekday_label($weekday), $hour)),
         ];
     }
 

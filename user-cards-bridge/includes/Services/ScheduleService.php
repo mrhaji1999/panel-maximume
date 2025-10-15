@@ -58,24 +58,29 @@ class ScheduleService {
      *
      * @return array<int, array<string, int>>
      */
-    public function get_availability(int $card_id, int $supervisor_id): array {
+    public function get_availability(int $card_id, int $supervisor_id, ?string $date = null): array {
         $matrix = $this->get_matrix($supervisor_id, $card_id);
         $availability = [];
 
         foreach ($matrix as $slot) {
             $weekday = (int) $slot['weekday'];
             $hour = (int) $slot['hour'];
-            $capacity = (int) $slot['capacity'];
+            $capacity = max(0, (int) $slot['capacity']);
+            $used = 0;
 
-            $reservations = $this->database->count_reservations_for_slot($card_id, $weekday, $hour);
+            if ($date) {
+                $used = $this->database->count_reservations_for_slot_on_date($card_id, $date, $weekday, $hour);
+            }
+
+            $remaining = max(0, $capacity - $used);
 
             $availability[] = [
-                'weekday'    => $weekday,
-                'hour'       => $hour,
-                'capacity'   => $capacity,
-                'reserved'   => $reservations,
-                'available'  => max(0, $capacity - $reservations),
-                'is_open'    => $reservations < $capacity,
+                'weekday'   => $weekday,
+                'hour'      => $hour,
+                'capacity'  => $capacity,
+                'used'      => $used,
+                'remaining' => $remaining,
+                'is_full'   => $capacity > 0 ? $used >= $capacity : true,
             ];
         }
 
