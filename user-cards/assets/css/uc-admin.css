@@ -1,0 +1,6 @@
+.wrap .uc-admin-row label { min-width: 120px; display:inline-block; }
+.uc-admin-select { min-width: 260px; }
+.uc-progress { margin-top: 8px; border-radius: 10px; height: 10px; background: #e9ecef; overflow: hidden; }
+.uc-progress > span { background: #2271b1; width: 0; height: 100%; display: block; transition: width .2s ease; }
+.uc-note { color: #666; }
+

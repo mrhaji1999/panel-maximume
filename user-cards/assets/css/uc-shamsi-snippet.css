@@ -1,0 +1,13 @@
+.shamsi-datepicker-container { position: relative; width: 100%; max-width: 300px; margin: 8px 0; }
+.shamsi-datepicker-field { padding: 10px 15px; border: 1px solid #2a2a2e; border-radius: 10px; width: 100%; box-sizing: border-box; font-family: Tahoma, sans-serif; font-size: 14px; text-align: right; background:#0f0f13; color:#e9e9ee; }
+.shamsi-calendar-popup { display: none; position: absolute; top: 100%; right: 0; z-index: 100000; background: #0e0e12; border: 1px solid #2a2a2e; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); padding: 10px; width: 300px; direction: rtl; font-family: Tahoma, sans-serif; color:#e9e9ee; }
+.shamsi-calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
+.shamsi-calendar-header button { background: #15151b; color:#cfd1d7; border: 1px solid #2a2a2e; padding: 5px 10px; cursor: not-allowed; border-radius: 8px; }
+.shamsi-calendar-body { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+.shamsi-calendar-day-name { font-weight: bold; color: #a9abb3; }
+.shamsi-calendar-day { padding: 8px 4px; cursor: not-allowed; border-radius: 8px; transition: background-color 0.2s, color 0.2s; font-size: 13px; background:#101016; color:#8b8d96; border:1px solid #1e1f25; }
+.shamsi-calendar-day.is-selectable { cursor: pointer; background-color: #14141b; color:#e9e9ee; }
+.shamsi-calendar-day.is-selectable:hover { background-color: #5b8cff; color: #fff; }
+.shamsi-calendar-day.is-selected { background-color: #5b8cff; color: #fff; font-weight: bold; }
+.shamsi-calendar-day.is-today { outline: 2px solid #ff7a45; font-weight: bold; color:#fff; }
+
