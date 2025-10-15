@@ -64,10 +64,16 @@ class ScheduleService {
         $target_weekday = null;
 
         if ($date) {
-            $timestamp = strtotime($date . ' 00:00:00');
-            if (false !== $timestamp) {
-                // date('N') returns 1 (Mon) through 7 (Sun)
-                $target_weekday = (int) (function_exists('wp_date') ? \wp_date('N', $timestamp) : date('N', $timestamp));
+            try {
+                $timezone = function_exists('wp_timezone') ? \wp_timezone() : new \DateTimeZone(date_default_timezone_get());
+                $date_object = new \DateTimeImmutable($date, $timezone);
+                // PHP's `w` format gives 0 (Sunday) through 6 (Saturday) which matches stored matrix values.
+                $target_weekday = (int) $date_object->format('w');
+            } catch (\Exception $exception) {
+                $timestamp = strtotime($date . ' 00:00:00');
+                if (false !== $timestamp) {
+                    $target_weekday = (int) (function_exists('wp_date') ? \wp_date('w', $timestamp) : date('w', $timestamp));
+                }
             }
         }
 
@@ -92,6 +98,7 @@ class ScheduleService {
                 'hour'      => $hour,
                 'capacity'  => $capacity,
                 'used'      => $used,
+                'reserved'  => $used,
                 'remaining' => $remaining,
                 'is_full'   => $capacity > 0 ? $used >= $capacity : true,
             ];
