@@ -67,6 +67,31 @@ class Schedule extends BaseController {
     public function availability(WP_REST_Request $request) {
         $card_id = (int) $request->get_param('card_id');
         $supervisor_id = (int) $request->get_param('supervisor_id');
+        $date = $request->get_param('date');
+
+        if (null !== $date && $date !== '') {
+            $date = sanitize_text_field((string) $date);
+
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                return $this->error(
+                    'ucb_invalid_date_format',
+                    __('Invalid reservation date format. Expected YYYY-MM-DD.', 'user-cards-bridge'),
+                    400
+                );
+            }
+
+            [$year, $month, $day] = array_map('intval', explode('-', $date));
+
+            if (!checkdate($month, $day, $year)) {
+                return $this->error(
+                    'ucb_invalid_date',
+                    __('The provided reservation date is not valid.', 'user-cards-bridge'),
+                    400
+                );
+            }
+        } else {
+            $date = null;
+        }
 
         if (!$supervisor_id) {
             $supervisor_id = $this->cards->get_default_supervisor($card_id);
@@ -76,11 +101,12 @@ class Schedule extends BaseController {
             return $this->error('ucb_supervisor_missing', __('Supervisor not assigned to this card.', 'user-cards-bridge'), 404);
         }
 
-        $availability = $this->schedule->get_availability($card_id, $supervisor_id);
+        $availability = $this->schedule->get_availability($card_id, $supervisor_id, $date);
 
         return $this->success([
             'card_id'       => $card_id,
             'supervisor_id' => $supervisor_id,
+            'date'          => $date,
             'slots'         => $availability,
         ]);
     }

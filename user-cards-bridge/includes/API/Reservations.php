@@ -45,10 +45,25 @@ class Reservations extends BaseController {
         $customer_id = (int) $request->get_param('customer_id');
         $card_id = (int) $request->get_param('card_id');
         $supervisor_id = (int) $request->get_param('supervisor_id');
-        $weekday = (int) $request->get_param('weekday');
-        $hour = (int) $request->get_param('hour');
+        $reservation_date = $request->get_param('reservation_date');
+        $reservation_date = $reservation_date !== null ? sanitize_text_field((string) $reservation_date) : '';
+        $hour_param = $request->get_param('slot_hour');
 
-        $result = $this->reservations->create($customer_id, $card_id, $supervisor_id, $weekday, $hour);
+        if ($hour_param === null) {
+            $hour_param = $request->get_param('hour');
+        }
+
+        $hour = (int) $hour_param;
+
+        if ($reservation_date === '') {
+            return $this->error('ucb_missing_reservation_date', __('Reservation date is required.', 'user-cards-bridge'), 400);
+        }
+
+        if ($hour < 0 || $hour > 23) {
+            return $this->error('ucb_invalid_slot_hour', __('Selected hour is not valid.', 'user-cards-bridge'), 400);
+        }
+
+        $result = $this->reservations->create($customer_id, $card_id, $supervisor_id, $reservation_date, $hour);
 
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);

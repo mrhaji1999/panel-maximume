@@ -2,6 +2,8 @@
 
 namespace UCB;
 
+use UCB\Migrations\ReservationDateMigration;
+
 class Plugin {
     
     /**
@@ -50,6 +52,7 @@ class Plugin {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_scripts']);
+        add_action('admin_init', [ReservationDateMigration::class, 'migrate']);
     }
     
     private function init_components() {
