@@ -6,6 +6,7 @@ class UC_Metaboxes {
         add_meta_box('uc_card_details', __('Card Settings', 'user-cards'), [__CLASS__, 'render_card_box'], 'uc_card', 'normal', 'high');
         add_meta_box('uc_card_codes', __('Codes (CSV Import)', 'user-cards'), [__CLASS__, 'render_codes_box'], 'uc_card', 'normal', 'default');
         add_meta_box('uc_card_pricing', __('Pricing (Normal + Upsells)', 'user-cards'), [__CLASS__, 'render_pricing_box'], 'uc_card', 'normal', 'default');
+        add_meta_box('uc_card_schedule', __('Weekly Schedule', 'user-cards'), [__CLASS__, 'render_schedule_box'], 'uc_card', 'normal', 'default');
     }
 
     public static function render_card_box($post) {
@@ -36,6 +37,250 @@ class UC_Metaboxes {
         echo '</select>';
         echo '</div>';
         echo '<p class="uc-note">' . esc_html__('Select the post type, then the specific post to associate with this card.', 'user-cards') . '</p>';
+    }
+
+    public static function render_schedule_box($post) {
+        echo '<div class="uc-schedule-meta">';
+
+        if (!class_exists('\\UCB\\Services\\ScheduleService')) {
+            echo '<p class="uc-note">' . esc_html__('برای نمایش جدول زمان‌بندی، افزونه وب‌سرویس باید فعال باشد.', 'user-cards') . '</p>';
+            echo '</div>';
+            return;
+        }
+
+        $card_id = (int) $post->ID;
+        $supervisors = self::get_supervisors_for_card($card_id);
+
+        if (empty($supervisors)) {
+            echo '<p class="uc-note">' . esc_html__('هنوز سرپرستی برای این کارت تعیین نشده است. ابتدا کارت را به یک سرپرست در افزونه وب‌سرویس اختصاص دهید.', 'user-cards') . '</p>';
+            echo '</div>';
+            return;
+        }
+
+        $schedule_service = new \UCB\Services\ScheduleService();
+        $hours = range(8, 18);
+        $weekday_labels = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه', 'شنبه'];
+        $timestamp = current_time('timestamp');
+
+        if (function_exists('wp_date')) {
+            $availability_date = wp_date('Y-m-d', $timestamp);
+            $availability_display = wp_date('Y/m/d', $timestamp);
+        } else {
+            $availability_date = gmdate('Y-m-d', $timestamp);
+            $availability_display = gmdate('Y/m/d', $timestamp);
+        }
+
+        $show_usage = method_exists($schedule_service, 'get_availability');
+        $sections = [];
+
+        foreach ($supervisors as $supervisor) {
+            $matrix = $schedule_service->get_matrix($supervisor['id'], $card_id);
+            $availability = $show_usage
+                ? $schedule_service->get_availability($card_id, $supervisor['id'], $availability_date)
+                : [];
+
+            $grid = self::build_schedule_grid($hours, $matrix, $availability);
+
+            $sections[] = [
+                'supervisor' => $supervisor,
+                'grid' => $grid,
+                'has_data' => self::has_schedule_data($grid),
+            ];
+        }
+
+        if ($show_usage) {
+            echo '<p class="uc-note">' . sprintf(esc_html__('ظرفیت و آمار رزرو هر اسلات زمانی برای تاریخ %s نمایش داده شده است.', 'user-cards'), esc_html($availability_display)) . '</p>';
+        } else {
+            echo '<p class="uc-note">' . esc_html__('ظرفیت مجاز هر ساعت در جدول زیر نمایش داده شده است.', 'user-cards') . '</p>';
+        }
+
+        if (count($sections) > 1) {
+            echo '<div class="uc-schedule-toolbar">';
+            echo '<label for="uc-schedule-supervisor"><strong>' . esc_html__('سرپرست', 'user-cards') . '</strong></label>';
+            echo '<select id="uc-schedule-supervisor" class="uc-admin-select">';
+            foreach ($sections as $index => $section) {
+                $label = $section['supervisor']['name'];
+                if ($section['supervisor']['is_default']) {
+                    $label .= ' (' . esc_html__('پیش‌فرض', 'user-cards') . ')';
+                }
+                printf(
+                    '<option value="%1$d" %2$s>%3$s</option>',
+                    (int) $section['supervisor']['id'],
+                    selected($index === 0, true, false),
+                    esc_html($label)
+                );
+            }
+            echo '</select>';
+            echo '</div>';
+        }
+
+        foreach ($sections as $index => $section) {
+            $supervisor = $section['supervisor'];
+            $style = ($index === 0) ? '' : ' style="display:none"';
+            echo '<div class="uc-schedule-section" data-supervisor="' . esc_attr($supervisor['id']) . '"' . $style . '>';
+            echo '<div class="uc-schedule-header">';
+            echo '<h4>' . esc_html($supervisor['name']);
+            if ($supervisor['is_default']) {
+                echo ' <span class="uc-schedule-badge">' . esc_html__('سرپرست پیش‌فرض', 'user-cards') . '</span>';
+            }
+            echo '</h4>';
+            echo '</div>';
+
+            if (!$section['has_data']) {
+                echo '<p class="uc-note uc-schedule-empty">' . esc_html__('هنوز ظرفیتی برای این سرپرست ثبت نشده است.', 'user-cards') . '</p>';
+            }
+
+            echo '<div class="uc-schedule-table-wrapper">';
+            echo '<table class="uc-schedule-grid">';
+            echo '<thead><tr><th>' . esc_html__('روز / ساعت', 'user-cards') . '</th>';
+            foreach ($hours as $hour) {
+                echo '<th>' . esc_html($hour . ':00') . '</th>';
+            }
+            echo '</tr></thead>';
+            echo '<tbody>';
+            foreach ($weekday_labels as $weekday => $label) {
+                echo '<tr>';
+                echo '<th>' . esc_html($label) . '</th>';
+                foreach ($hours as $hour) {
+                    $slot = $section['grid'][$weekday][$hour];
+                    $overbooked = $slot['used'] > $slot['capacity'] && $slot['capacity'] > 0;
+                    $td_class = $overbooked ? ' class="uc-schedule-overbooked"' : '';
+                    echo '<td' . $td_class . '>';
+                    echo '<div class="uc-schedule-cell">';
+                    echo '<strong>' . esc_html(number_format_i18n($slot['capacity'])) . '</strong>';
+                    echo '<span>' . sprintf(esc_html__('رزرو: %s', 'user-cards'), esc_html(number_format_i18n($slot['used']))) . '</span>';
+                    echo '<span>' . sprintf(esc_html__('خالی: %s', 'user-cards'), esc_html(number_format_i18n($slot['remaining']))) . '</span>';
+                    echo '</div>';
+                    echo '</td>';
+                }
+                echo '</tr>';
+            }
+            echo '</tbody>';
+            echo '</table>';
+            echo '</div>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+    }
+
+    private static function get_supervisors_for_card(int $card_id): array {
+        $supervisors = [];
+        $default_supervisor = (int) get_post_meta($card_id, 'ucb_default_supervisor', true);
+
+        $users = get_users([
+            'role__in' => ['supervisor'],
+            'number' => -1,
+            'fields' => ['ID', 'display_name', 'user_login'],
+        ]);
+
+        foreach ($users as $user) {
+            $cards = get_user_meta($user->ID, 'ucb_supervisor_cards', true);
+            if (!is_array($cards)) {
+                continue;
+            }
+            $cards = array_map('intval', $cards);
+            if (in_array($card_id, $cards, true)) {
+                $supervisors[$user->ID] = [
+                    'id' => (int) $user->ID,
+                    'name' => self::format_user_name($user),
+                    'is_default' => ((int) $user->ID === $default_supervisor),
+                ];
+            }
+        }
+
+        if ($default_supervisor > 0 && !isset($supervisors[$default_supervisor])) {
+            $user = get_user_by('id', $default_supervisor);
+            $supervisors[$default_supervisor] = [
+                'id' => $default_supervisor,
+                'name' => $user ? self::format_user_name($user) : sprintf(esc_html__('سرپرست #%d', 'user-cards'), $default_supervisor),
+                'is_default' => true,
+            ];
+        }
+
+        uasort($supervisors, function ($a, $b) {
+            if ($a['is_default'] === $b['is_default']) {
+                return strcasecmp($a['name'], $b['name']);
+            }
+            return $a['is_default'] ? -1 : 1;
+        });
+
+        return array_values($supervisors);
+    }
+
+    private static function format_user_name($user): string {
+        if (!$user) {
+            return '';
+        }
+
+        $first = trim((string) get_user_meta($user->ID, 'first_name', true));
+        $last = trim((string) get_user_meta($user->ID, 'last_name', true));
+        $name = trim($first . ' ' . $last);
+
+        if ($name === '') {
+            $name = trim((string) $user->display_name);
+        }
+
+        if ($name === '') {
+            $name = (string) $user->user_login;
+        }
+
+        return $name;
+    }
+
+    private static function build_schedule_grid(array $hours, array $matrix, array $availability): array {
+        $grid = [];
+        for ($weekday = 0; $weekday <= 6; $weekday++) {
+            $grid[$weekday] = [];
+            foreach ($hours as $hour) {
+                $grid[$weekday][$hour] = [
+                    'capacity' => 0,
+                    'used' => 0,
+                    'remaining' => 0,
+                ];
+            }
+        }
+
+        foreach ($matrix as $slot) {
+            $weekday = isset($slot['weekday']) ? (int) $slot['weekday'] : null;
+            $hour = isset($slot['hour']) ? (int) $slot['hour'] : null;
+            if ($weekday === null || $hour === null) {
+                continue;
+            }
+            if (!isset($grid[$weekday][$hour])) {
+                continue;
+            }
+            $grid[$weekday][$hour]['capacity'] = max(0, (int) ($slot['capacity'] ?? 0));
+        }
+
+        foreach ($availability as $slot) {
+            $weekday = isset($slot['weekday']) ? (int) $slot['weekday'] : null;
+            $hour = isset($slot['hour']) ? (int) $slot['hour'] : null;
+            if ($weekday === null || $hour === null) {
+                continue;
+            }
+            if (!isset($grid[$weekday][$hour])) {
+                continue;
+            }
+
+            $grid[$weekday][$hour]['capacity'] = max($grid[$weekday][$hour]['capacity'], (int) ($slot['capacity'] ?? 0));
+            $grid[$weekday][$hour]['used'] = max(0, (int) ($slot['used'] ?? 0));
+            $grid[$weekday][$hour]['remaining'] = max(0, (int) ($slot['remaining'] ?? 0));
+        }
+
+        return $grid;
+    }
+
+    private static function has_schedule_data(array $grid): bool {
+        foreach ($grid as $weekday) {
+            foreach ($weekday as $slot) {
+                if ($slot['capacity'] > 0 || $slot['used'] > 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public static function render_codes_box($post) {

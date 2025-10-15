@@ -161,14 +161,15 @@ export interface AvailabilitySlot {
   weekday: number
   hour: number
   capacity: number
-  reserved: number
-  available: number
-  is_open: boolean
+  used: number
+  remaining: number
+  is_full: boolean
 }
 
 export interface AvailabilityResponse {
   card_id: number
   supervisor_id: number
+  date?: string | null
   slots: AvailabilitySlot[]
 }
 
