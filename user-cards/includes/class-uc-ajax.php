@@ -107,9 +107,17 @@ class UC_Ajax {
             wp_send_json_error(['message' => __('این کد قبلا استفاده شده است.', 'user-cards')], 400);
         }
 
+        $assigned_supervisor = (int) get_user_meta($user_id, 'ucb_customer_assigned_supervisor', true);
+        if ($assigned_supervisor <= 0) {
+            $assigned_supervisor = (int) get_post_meta((int)$card_id, 'ucb_default_supervisor', true);
+        }
+        if ($assigned_supervisor <= 0) {
+            $assigned_supervisor = (int) get_post_meta((int)$card_id, '_uc_supervisor_id', true);
+        }
+
         // Capacity enforcement based on schedule (User Cards Bridge)
         if (class_exists('UCB_Schedules')) {
-            $sup_id = (int) get_post_meta((int)$card_id, '_uc_supervisor_id', true);
+            $sup_id = $assigned_supervisor;
             if ($sup_id > 0) {
                 $schedule = UCB_Schedules::get_schedule((int)$card_id, (int)$sup_id);
                 if ($schedule && !empty($schedule['grid'])) {
@@ -159,6 +167,21 @@ class UC_Ajax {
         update_post_meta($sub_id, '_uc_date', $date);
         update_post_meta($sub_id, '_uc_time', $time);
         update_post_meta($sub_id, '_uc_surprise', $surprise);
+
+        if ($assigned_supervisor > 0) {
+            update_user_meta($user_id, 'ucb_customer_assigned_supervisor', $assigned_supervisor);
+            update_user_meta($user_id, 'ucb_customer_supervisor_id', $assigned_supervisor);
+            update_post_meta($sub_id, '_uc_supervisor_id', $assigned_supervisor);
+        }
+
+        update_user_meta($user_id, 'ucb_customer_card_id', $card_id);
+
+        $assigned_agent = (int) get_user_meta($user_id, 'ucb_customer_assigned_agent', true);
+        if ($assigned_agent > 0) {
+            update_user_meta($user_id, 'ucb_customer_assigned_agent', $assigned_agent);
+            update_user_meta($user_id, 'ucb_customer_agent_id', $assigned_agent);
+            update_post_meta($sub_id, '_uc_agent_id', $assigned_agent);
+        }
 
         wp_send_json_success([
             'message' => __('با موفقیت ثبت شد.', 'user-cards'),

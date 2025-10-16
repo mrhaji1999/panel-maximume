@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card,
   CardContent,
@@ -19,8 +19,10 @@ import {
   getStatusLabel,
 } from '@/lib/utils'
 import { useAuth } from '@/store/authStore'
+import { useNotification } from '@/store/uiStore'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Search } from 'lucide-react'
+import { AssignmentDialog } from '@/components/customers/assignment-dialog'
 
 const PER_PAGE = 20
 
@@ -31,7 +33,10 @@ type FilterState = {
 
 export function MyCustomersPage() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const { success: notifySuccess, error: notifyError } = useNotification()
   const [filters, setFilters] = useState<FilterState>({ search: '', page: 1 })
+  const [assignmentCustomer, setAssignmentCustomer] = useState<Customer | null>(null)
   const debouncedSearch = useDebounce(filters.search, 400)
 
   useEffect(() => {
@@ -61,6 +66,39 @@ export function MyCustomersPage() {
   const pagination = query.data?.pagination
   const totalPages = pagination?.total_pages ?? 1
   const total = pagination?.total ?? 0
+  const canAssignAgents = user?.role === 'supervisor'
+
+  const assignAgentMutation = useMutation({
+    mutationFn: async ({ customerId, agentId }: { customerId: number; agentId: number }) => {
+      const response = await customersApi.assignAgent(customerId, agentId)
+      if (!response.success) {
+        throw new Error(response.error?.message || 'تخصیص کارشناس ناموفق بود')
+      }
+      return response.data
+    },
+    onSuccess: () => {
+      notifySuccess('کارشناس ثبت شد', 'کارشناس مشتری با موفقیت بروزرسانی شد')
+      queryClient.invalidateQueries({ queryKey: ['my-customers'] })
+      queryClient.invalidateQueries({ queryKey: ['assigned-customers'] })
+    },
+    onError: (error) => {
+      notifyError('خطا در تخصیص کارشناس', getErrorMessage(error))
+    },
+  })
+
+  const handleOpenAssignment = (customer: Customer) => {
+    if (!canAssignAgents) return
+    setAssignmentCustomer(customer)
+  }
+
+  const handleAssignmentSubmit = async (agentId: number) => {
+    if (!assignmentCustomer) return
+    await assignAgentMutation.mutateAsync({ customerId: assignmentCustomer.id, agentId })
+    setAssignmentCustomer(null)
+  }
+
+  const getCustomerName = (customer: Customer) =>
+    customer.display_name || customer.email || `مشتری #${customer.id}`
 
   return (
     <div className="space-y-6">
@@ -108,7 +146,13 @@ export function MyCustomersPage() {
       ) : (
         <div className="grid gap-4">
           {customers.map((customer: Customer) => (
-            <CustomerCard key={customer.id} customer={customer} />
+            <CustomerCard
+              key={customer.id}
+              customer={customer}
+              onAssignAgent={canAssignAgents ? handleOpenAssignment : undefined}
+              isAssigning={assignAgentMutation.isPending}
+              canAssignAgent={canAssignAgents}
+            />
           ))}
         </div>
       )}
@@ -136,11 +180,37 @@ export function MyCustomersPage() {
           </div>
         </div>
       )}
+
+      {canAssignAgents && (
+        <AssignmentDialog
+          type="agent"
+          open={Boolean(assignmentCustomer)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAssignmentCustomer(null)
+            }
+          }}
+          customerName={assignmentCustomer ? getCustomerName(assignmentCustomer) : ''}
+          isSubmitting={assignAgentMutation.isPending}
+          onSubmit={handleAssignmentSubmit}
+          supervisorFilter={user?.id}
+        />
+      )}
     </div>
   )
 }
 
-function CustomerCard({ customer }: { customer: Customer }) {
+function CustomerCard({
+  customer,
+  onAssignAgent,
+  isAssigning,
+  canAssignAgent,
+}: {
+  customer: Customer
+  onAssignAgent?: (customer: Customer) => void
+  isAssigning: boolean
+  canAssignAgent: boolean
+}) {
   return (
     <Card>
       <CardContent className="space-y-3 p-6">
@@ -157,6 +227,18 @@ function CustomerCard({ customer }: { customer: Customer }) {
           <span>کارشناس: {customer.assigned_agent_name || '-'}</span>
           <span>ثبت‌نام: {formatDateTime(customer.registered_at ?? '')}</span>
         </div>
+        {canAssignAgent && onAssignAgent && (
+          <div className="pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onAssignAgent(customer)}
+              disabled={isAssigning}
+            >
+              {isAssigning ? 'در حال ذخیره...' : 'تخصیص کارشناس'}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

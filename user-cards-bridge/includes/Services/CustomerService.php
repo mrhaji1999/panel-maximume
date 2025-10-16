@@ -42,13 +42,6 @@ class CustomerService {
             ];
         }
 
-        if (!empty($filters['supervisor_id'])) {
-            $meta_query[] = [
-                'key'   => 'ucb_customer_assigned_supervisor',
-                'value' => (int) $filters['supervisor_id'],
-            ];
-        }
-
         if (!empty($filters['agent_id'])) {
             $meta_query[] = [
                 'key'   => 'ucb_customer_assigned_agent',
@@ -62,7 +55,22 @@ class CustomerService {
             'orderby'    => 'registered',
             'order'      => 'DESC',
             'meta_query' => $meta_query,
+            'count_total'=> true,
         ];
+
+        if (!empty($filters['supervisor_id'])) {
+            $supervisor_id = (int) $filters['supervisor_id'];
+            $customer_ids = $this->get_customer_ids_for_supervisor($supervisor_id);
+
+            if (empty($customer_ids)) {
+                return [
+                    'items' => [],
+                    'total' => 0,
+                ];
+            }
+
+            $args['include'] = $customer_ids;
+        }
 
         if (!empty($filters['search'])) {
             $search = sanitize_text_field($filters['search']);
@@ -126,10 +134,25 @@ class CustomerService {
             $params[] = (int) $filters['card_id'];
         }
 
+        $restricted_user_ids = [];
         if (!empty($filters['supervisor_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} sup_meta ON sup_meta.user_id = status_meta.user_id AND sup_meta.meta_key = 'ucb_customer_assigned_supervisor'";
-            $where[] = 'sup_meta.meta_value = %d';
-            $params[] = (int) $filters['supervisor_id'];
+            $restricted_user_ids = $this->get_customer_ids_for_supervisor((int) $filters['supervisor_id']);
+
+            if (empty($restricted_user_ids)) {
+                $status_manager = new StatusManager();
+                $counts = [];
+                foreach (array_keys($status_manager->get_statuses()) as $status) {
+                    $counts[$status] = 0;
+                }
+
+                ksort($counts);
+
+                return $counts;
+            }
+
+            $placeholders = implode(', ', array_fill(0, count($restricted_user_ids), '%d'));
+            $where[] = 'status_meta.user_id IN (' . $placeholders . ')';
+            $params = array_merge($params, $restricted_user_ids);
         }
 
         if (!empty($filters['agent_id'])) {
@@ -220,6 +243,7 @@ class CustomerService {
      */
     public function assign_supervisor(int $customer_id, int $supervisor_id): void {
         update_user_meta($customer_id, 'ucb_customer_assigned_supervisor', $supervisor_id);
+        update_user_meta($customer_id, 'ucb_customer_supervisor_id', $supervisor_id);
         $this->update_forms_meta($customer_id, '_uc_supervisor_id', $supervisor_id);
         $this->update_reservations_supervisor($customer_id, $supervisor_id);
     }
@@ -229,6 +253,7 @@ class CustomerService {
      */
     public function assign_agent(int $customer_id, int $agent_id): void {
         update_user_meta($customer_id, 'ucb_customer_assigned_agent', $agent_id);
+        update_user_meta($customer_id, 'ucb_customer_agent_id', $agent_id);
         $this->update_forms_meta($customer_id, '_uc_agent_id', $agent_id);
     }
 
@@ -332,5 +357,60 @@ class CustomerService {
         $user = get_user_by('id', $user_id);
 
         return $user ? $user->display_name : null;
+    }
+
+    /**
+     * Resolve customer IDs assigned to supervisor either via user meta or form submissions.
+     *
+     * @return array<int>
+     */
+    protected function get_customer_ids_for_supervisor(int $supervisor_id): array {
+        if ($supervisor_id <= 0) {
+            return [];
+        }
+
+        $ids = [];
+
+        $assigned_users = get_users([
+            'fields'     => 'ID',
+            'number'     => -1,
+            'meta_query' => [
+                'relation' => 'OR',
+                [
+                    'key'   => 'ucb_customer_assigned_supervisor',
+                    'value' => $supervisor_id,
+                ],
+                [
+                    'key'   => 'ucb_customer_supervisor_id',
+                    'value' => $supervisor_id,
+                ],
+            ],
+        ]);
+
+        foreach ((array) $assigned_users as $user_id) {
+            $ids[] = (int) $user_id;
+        }
+
+        global $wpdb;
+        $post_user_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT DISTINCT user_meta.meta_value
+             FROM {$wpdb->postmeta} AS sup_meta
+             INNER JOIN {$wpdb->postmeta} AS user_meta
+                 ON user_meta.post_id = sup_meta.post_id
+                 AND user_meta.meta_key = '_uc_user_id'
+             WHERE sup_meta.meta_key = '_uc_supervisor_id'
+             AND sup_meta.meta_value = %d",
+            $supervisor_id
+        ));
+
+        foreach ((array) $post_user_ids as $user_id) {
+            $ids[] = (int) $user_id;
+        }
+
+        $ids = array_filter(array_map('intval', $ids), static function ($id) {
+            return $id > 0;
+        });
+
+        return array_values(array_unique($ids));
     }
 }

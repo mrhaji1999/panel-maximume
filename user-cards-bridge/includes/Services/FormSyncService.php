@@ -38,21 +38,41 @@ class FormSyncService {
 
         // Supervisor assignment
         $supervisor_id = (int) get_user_meta($customer_id, 'ucb_customer_assigned_supervisor', true);
+
+        if ($supervisor_id <= 0) {
+            $submission_supervisor = (int) get_post_meta($post_id, '_uc_supervisor_id', true);
+            if ($submission_supervisor > 0) {
+                $supervisor_id = $submission_supervisor;
+            }
+        }
+
         if ($supervisor_id <= 0 && $card_id > 0) {
             $default_supervisor = (int) get_post_meta($card_id, 'ucb_default_supervisor', true);
             if ($default_supervisor > 0) {
                 update_user_meta($customer_id, 'ucb_customer_assigned_supervisor', $default_supervisor);
+                update_user_meta($customer_id, 'ucb_customer_supervisor_id', $default_supervisor);
                 $supervisor_id = $default_supervisor;
             }
         }
 
         if ($supervisor_id > 0) {
+            update_user_meta($customer_id, 'ucb_customer_assigned_supervisor', $supervisor_id);
+            update_user_meta($customer_id, 'ucb_customer_supervisor_id', $supervisor_id);
             update_post_meta($post_id, '_uc_supervisor_id', $supervisor_id);
         }
 
         // Agent assignment
         $agent_id = (int) get_user_meta($customer_id, 'ucb_customer_assigned_agent', true);
+        if ($agent_id <= 0) {
+            $submission_agent = (int) get_post_meta($post_id, '_uc_agent_id', true);
+            if ($submission_agent > 0) {
+                $agent_id = $submission_agent;
+            }
+        }
+
         if ($agent_id > 0) {
+            update_user_meta($customer_id, 'ucb_customer_assigned_agent', $agent_id);
+            update_user_meta($customer_id, 'ucb_customer_agent_id', $agent_id);
             update_post_meta($post_id, '_uc_agent_id', $agent_id);
         }
     }
