@@ -5,6 +5,7 @@ namespace UCB\Services;
 use WP_Error;
 use WP_Post;
 use WP_Query;
+use WP_User_Query;
 
 /**
  * Handles interaction with user-cards CPT.
@@ -142,5 +143,39 @@ class CardService {
      */
     public function get_default_supervisor(int $card_id): int {
         return (int) get_post_meta($card_id, 'ucb_default_supervisor', true);
+    }
+
+    /**
+     * Retrieve supervisors assigned to a card.
+     *
+     * @return array<int, int> List of supervisor user IDs with default supervisor (if any) first.
+     */
+    public function get_card_supervisors(int $card_id): array {
+        $card_id = (int) $card_id;
+        if ($card_id <= 0) {
+            return [];
+        }
+
+        $query = new WP_User_Query([
+            'role'        => 'supervisor',
+            'number'      => -1,
+            'fields'      => 'ID',
+            'meta_query'  => [[
+                'key'     => 'ucb_supervisor_cards',
+                'value'   => '"' . $card_id . '"',
+                'compare' => 'LIKE',
+            ]],
+        ]);
+
+        $ids = array_map('intval', (array) $query->get_results());
+
+        $default = $this->get_default_supervisor($card_id);
+        if ($default > 0) {
+            array_unshift($ids, $default);
+        }
+
+        return array_values(array_unique(array_filter($ids, static function ($id) {
+            return (int) $id > 0;
+        })));
     }
 }
