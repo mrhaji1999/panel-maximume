@@ -86,7 +86,34 @@ class UserService {
         
         return $user_id;
     }
-    
+
+    /**
+     * Ensure the user exists and has one of the allowed roles.
+     */
+    public function ensure_role(int $user_id, array $roles): WP_User|WP_Error {
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error(
+                'ucb_user_not_found',
+                __('User not found.', UCB_TEXT_DOMAIN),
+                ['status' => 404]
+            );
+        }
+
+        $allowed_roles = array_intersect($user->roles, $roles);
+
+        if (empty($allowed_roles)) {
+            return new WP_Error(
+                'ucb_invalid_role',
+                __('User does not have the required role.', UCB_TEXT_DOMAIN),
+                ['status' => 400]
+            );
+        }
+
+        return $user;
+    }
+
     /**
      * Format user data for API response
      */
