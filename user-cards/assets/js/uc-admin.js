@@ -56,4 +56,26 @@
     // Keep at least one row
     if ($('.uc-price-row').length > 1) $row.remove();
   });
+
+  function showScheduleSection(supervisorId){
+    var id = supervisorId;
+    if (typeof id === 'undefined' || id === null) {
+      id = $('#uc-schedule-supervisor').val();
+    }
+    $('.uc-schedule-section').each(function(){
+      var $section = $(this);
+      var match = !id || String($section.data('supervisor')) === String(id);
+      $section.toggle(match);
+    });
+  }
+
+  $(document).on('change', '#uc-schedule-supervisor', function(){
+    showScheduleSection($(this).val());
+  });
+
+  $(function(){
+    if ($('#uc-schedule-supervisor').length) {
+      showScheduleSection($('#uc-schedule-supervisor').val());
+    }
+  });
 })(jQuery);

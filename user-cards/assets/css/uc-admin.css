@@ -4,3 +4,21 @@
 .uc-progress > span { background: #2271b1; width: 0; height: 100%; display: block; transition: width .2s ease; }
 .uc-note { color: #666; }
 
+.uc-schedule-meta { margin-top: 12px; }
+.uc-schedule-toolbar { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.uc-schedule-toolbar label { margin: 0; }
+.uc-schedule-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.uc-schedule-header h4 { margin: 0; font-size: 15px; }
+.uc-schedule-badge { display: inline-flex; align-items: center; background: #2271b1; color: #fff; border-radius: 999px; padding: 0 8px; font-size: 11px; line-height: 20px; margin-right: 6px; }
+.uc-schedule-table-wrapper { overflow-x: auto; margin-top: 8px; }
+.uc-schedule-grid { width: 100%; border-collapse: collapse; min-width: 720px; }
+.uc-schedule-grid th,
+.uc-schedule-grid td { border: 1px solid #dcdcde; padding: 6px 8px; text-align: center; font-size: 12px; }
+.uc-schedule-grid th { background: #f6f7f7; font-weight: 600; white-space: nowrap; }
+.uc-schedule-grid tbody th { background: #fbfbfc; font-weight: 600; text-align: right; }
+.uc-schedule-cell { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.uc-schedule-cell strong { font-size: 14px; color: #1d2327; }
+.uc-schedule-cell span { font-size: 11px; color: #555; }
+.uc-schedule-overbooked { background: #fde2e1; }
+.uc-schedule-empty { margin-top: 0; }
+

@@ -102,12 +102,47 @@
     return $target;
   }
 
+  var weekdayNames = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه', 'شنبه'];
+
+  function parseNumber(value) {
+    var parsed = parseInt(value, 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  function getWeekdayName(index) {
+    var parsed = parseInt(index, 10);
+    if (isNaN(parsed) || parsed < 0 || parsed > 6) {
+      return '';
+    }
+    return weekdayNames[parsed] || '';
+  }
+
+  function formatHourLabel(hour) {
+    var parsed = parseInt(hour, 10);
+    if (isNaN(parsed) || parsed < 0) {
+      return '';
+    }
+    return (parsed < 10 ? '0' + parsed : parsed) + ':00';
+  }
+
+  function formatUsageMessage(used, capacity, remaining) {
+    var template = (UC_Ajax && UC_Ajax.i18n && UC_Ajax.i18n.availabilityUsage)
+      ? UC_Ajax.i18n.availabilityUsage
+      : 'رزرو شده {used} از {capacity} (باقی‌مانده {remaining})';
+
+    return template
+      .replace('{used}', used)
+      .replace('{capacity}', capacity)
+      .replace('{remaining}', remaining);
+  }
+
   function ucFetchAvailability() {
     var $m = $('#uc-card-modal');
     var $input = $m.find('#uc-date-input');
     var isoFull = ($input.attr('data-gregorian') || '').toString();
     var isoDate = isoFull ? isoFull.split('T')[0] : '';
     var $msg = availabilityMessageTarget($m);
+    var $summary = $m.find('.uc-availability-summary');
 
     if (!currentCardId) {
       return;
@@ -120,7 +155,10 @@
       }
       $m.find('.uc-time').each(function(){
         $(this).prop('disabled', true).removeClass('active').addClass('is-disabled');
-      });
+      }).removeAttr('data-used data-capacity data-remaining title');
+      if ($summary.length) {
+        $summary.empty().removeClass('empty');
+      }
       selectedHour = null;
       selectedTimeLabel = '';
       return;
@@ -128,9 +166,17 @@
 
     selectedDateIso = isoDate;
     $msg.text('');
+    if ($summary.length) {
+      $summary.empty().removeClass('empty');
+    }
     $m.find('.uc-step-3').addClass('uc-loading');
 
     var endpoint = getApiBase() + '/availability/' + encodeURIComponent(currentCardId) + '?date=' + encodeURIComponent(isoDate);
+    var targetWeekday = null;
+    var jsDate = new Date(isoDate + 'T00:00:00');
+    if (!isNaN(jsDate.getTime())) {
+      targetWeekday = jsDate.getDay();
+    }
 
     $.getJSON(endpoint).done(function(res){
       var slots = [];
@@ -140,34 +186,152 @@
         slots = res.slots;
       }
 
-      var map = {};
+      var grouped = {};
       slots.forEach(function(slot){
+        var key = 'unknown';
+        if (slot && Object.prototype.hasOwnProperty.call(slot, 'weekday')) {
+          var wk = parseInt(slot.weekday, 10);
+          if (!isNaN(wk)) {
+            key = wk;
+          }
+        }
+        if (!grouped[key]) {
+          grouped[key] = [];
+        }
+        grouped[key].push(slot);
+      });
+
+      var slotsForDay = slots;
+      if (targetWeekday !== null) {
+        if (Object.prototype.hasOwnProperty.call(grouped, targetWeekday)) {
+          slotsForDay = grouped[targetWeekday];
+        } else if (Object.prototype.hasOwnProperty.call(grouped, 'unknown')) {
+          slotsForDay = grouped.unknown;
+        } else {
+          slotsForDay = [];
+        }
+      }
+
+      var map = {};
+      slotsForDay.forEach(function(slot){
+        if (!slot) {
+          return;
+        }
         var hour = parseInt(slot.hour, 10);
-        if (!isNaN(hour)) {
+        if (isNaN(hour)) {
+          return;
+        }
+        if (!map[hour]) {
+          map[hour] = slot;
+          return;
+        }
+        var currentRemaining = parseNumber(map[hour].remaining);
+        var candidateRemaining = parseNumber(slot.remaining);
+        if (candidateRemaining > currentRemaining) {
           map[hour] = slot;
         }
       });
 
       $m.find('.uc-time').each(function(){
         var $btn = $(this);
+        var baseLabel = $btn.data('label');
+        if (!baseLabel) {
+          baseLabel = ($btn.data('time') || $btn.text() || '').toString();
+          $btn.data('label', baseLabel);
+        }
+        $btn.text(baseLabel);
+        $btn.removeAttr('data-used data-capacity data-remaining title');
         var hour = resolveHour($btn);
         var slot = map[hour];
-        var hasCapacity = slot && slot.capacity > 0 && (!slot.is_full) && (slot.remaining === undefined || slot.remaining > 0);
-
-        if (hasCapacity) {
-          $btn.prop('disabled', false).removeClass('is-disabled');
-          if (slot.remaining !== undefined) {
-            $btn.attr('data-remaining', slot.remaining);
+        if (slot) {
+          var capacity = parseNumber(slot.capacity);
+          var used = Object.prototype.hasOwnProperty.call(slot, 'used') ? parseNumber(slot.used) : 0;
+          var remaining = Object.prototype.hasOwnProperty.call(slot, 'remaining') ? parseNumber(slot.remaining) : 0;
+          if (!Object.prototype.hasOwnProperty.call(slot, 'used') && capacity > 0) {
+            used = Math.max(0, capacity - remaining);
           }
+          if (!Object.prototype.hasOwnProperty.call(slot, 'remaining')) {
+            remaining = Math.max(0, capacity - used);
+          }
+          var isFull = slot.is_full === true || slot.is_full === 1 || slot.is_full === '1';
+          var hasCapacity = capacity > 0 && remaining > 0 && !isFull;
+          if (capacity > 0) {
+            $btn.text(baseLabel + ' • ' + used + '/' + capacity);
+          }
+          if (hasCapacity) {
+            $btn.prop('disabled', false).removeClass('is-disabled');
+            $btn.attr('title', formatUsageMessage(used, capacity, remaining));
+          } else {
+            $btn.prop('disabled', true).addClass('is-disabled');
+            $btn.removeClass('active');
+            if (selectedHour === hour) {
+              selectedHour = null;
+              selectedTimeLabel = '';
+            }
+          }
+          $btn.attr('data-used', used);
+          $btn.attr('data-capacity', capacity);
+          $btn.attr('data-remaining', remaining);
         } else {
-          $btn.prop('disabled', true).removeClass('active').addClass('is-disabled');
-          $btn.removeAttr('data-remaining');
+          $btn.prop('disabled', true).addClass('is-disabled');
+          $btn.removeClass('active');
           if (selectedHour === hour) {
             selectedHour = null;
             selectedTimeLabel = '';
           }
         }
       });
+
+      if ($summary.length) {
+        var keys = Object.keys(map);
+        if (!keys.length) {
+          var noDataText = (UC_Ajax && UC_Ajax.i18n && UC_Ajax.i18n.availabilityNoData)
+            ? UC_Ajax.i18n.availabilityNoData
+            : 'برای این تاریخ ظرفیتی ثبت نشده است.';
+          $summary.text(noDataText).addClass('empty');
+        } else {
+          keys.sort(function(a, b){ return parseInt(a, 10) - parseInt(b, 10); });
+          var weekdayLabel = '';
+          if (targetWeekday !== null) {
+            weekdayLabel = getWeekdayName(targetWeekday);
+          }
+          if (!weekdayLabel && slotsForDay.length) {
+            weekdayLabel = getWeekdayName(slotsForDay[0] && slotsForDay[0].weekday);
+          }
+          var headerLabel = (UC_Ajax && UC_Ajax.i18n && UC_Ajax.i18n.availabilityDayLabel)
+            ? UC_Ajax.i18n.availabilityDayLabel
+            : 'روز انتخابی:';
+          var headerParts = [];
+          if (weekdayLabel) {
+            headerParts.push(weekdayLabel);
+          }
+          if (selectedDateIso) {
+            headerParts.push(selectedDateIso);
+          }
+          var headerText = headerLabel;
+          if (headerParts.length) {
+            headerText += ' ' + headerParts.join(' - ');
+          }
+
+          var summaryHtml = '<strong>' + headerText + '</strong><ul>';
+          keys.forEach(function(hourKey){
+            var slotData = map[hourKey];
+            if (!slotData) {
+              return;
+            }
+            var capacityValue = parseNumber(slotData.capacity);
+            var usedValue = Object.prototype.hasOwnProperty.call(slotData, 'used')
+              ? parseNumber(slotData.used)
+              : Math.max(0, capacityValue - parseNumber(slotData.remaining));
+            var remainingValue = Object.prototype.hasOwnProperty.call(slotData, 'remaining')
+              ? parseNumber(slotData.remaining)
+              : Math.max(0, capacityValue - usedValue);
+            summaryHtml += '<li>' + formatHourLabel(hourKey) + ' - ' + formatUsageMessage(usedValue, capacityValue, remainingValue) + '</li>';
+          });
+          summaryHtml += '</ul>';
+          $summary.removeClass('empty').html(summaryHtml);
+        }
+      }
     }).fail(function(jqXHR){
       var message = UC_Ajax.i18n.serverError;
       if (jqXHR && jqXHR.responseJSON) {
@@ -182,6 +346,14 @@
       } else {
         alert(message);
       }
+      if ($summary.length) {
+        $summary.text(message).addClass('empty');
+      }
+      $m.find('.uc-time').each(function(){
+        $(this).prop('disabled', true).removeClass('active').addClass('is-disabled');
+      }).removeAttr('data-used data-capacity data-remaining title');
+      selectedHour = null;
+      selectedTimeLabel = '';
     }).always(function(){
       $m.find('.uc-step-3').removeClass('uc-loading');
     });

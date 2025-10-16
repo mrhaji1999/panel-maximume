@@ -179,9 +179,10 @@ class UC_Shortcodes {
                         <label style="margin-top:12px; display:block;"><?php echo esc_html__('انتخاب ساعت', 'user-cards'); ?></label>
                         <div class="uc-time-scroll">
                             <?php for ($h=9; $h<=18; $h++): $label = sprintf('%02d:00', $h); ?>
-                                <button class="uc-time" data-time="<?php echo esc_attr($label); ?>"><?php echo esc_html($label); ?></button>
+                                <button class="uc-time" data-time="<?php echo esc_attr($label); ?>" data-hour="<?php echo esc_attr($h); ?>" data-label="<?php echo esc_attr($label); ?>"><?php echo esc_html($label); ?></button>
                             <?php endfor; ?>
                         </div>
+                        <div class="uc-availability-summary" aria-live="polite"></div>
                         <div class="uc-step-actions">
                             <button class="uc-btn uc-primary" data-action="submit-form"><?php echo esc_html__('تایید و ثبت', 'user-cards'); ?></button>
                             <button class="uc-btn uc-secondary" data-action="back-2"><?php echo esc_html__('بازگشت', 'user-cards'); ?></button>

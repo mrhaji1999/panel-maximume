@@ -430,9 +430,10 @@ export function SchedulePage() {
                           const key = buildKey(weekday, hour)
                           const capacity = matrixDraft[key] ?? 0
                           const slotAvailability = availabilityMap.get(key)
-                          const reserved = slotAvailability?.reserved ?? 0
-                          const available = Math.max(0, capacity - reserved)
-                          const isOverbooked = reserved > capacity
+                          const used = slotAvailability?.used ?? 0
+                          const available =
+                            slotAvailability?.remaining ?? Math.max(0, capacity - used)
+                          const isOverbooked = used > capacity
 
                           return (
                             <td
@@ -447,7 +448,7 @@ export function SchedulePage() {
                                   {capacity}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  رزرو: {reserved}
+                                  رزرو: {used}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                   خالی: {available}

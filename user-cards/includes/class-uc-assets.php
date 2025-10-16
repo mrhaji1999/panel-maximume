@@ -38,6 +38,9 @@ class UC_Assets {
                 'serverError' => __('خطایی رخ داد. مجدد تلاش کنید.', 'user-cards'),
                 'invalidDate' => __('تاریخ انتخابی نامعتبر است.', 'user-cards'),
                 'slotFull' => __('این ساعت برای این تاریخ تکمیل شده است.', 'user-cards'),
+                'availabilityDayLabel' => __('روز انتخابی:', 'user-cards'),
+                'availabilityUsage' => __('رزرو شده {used} از {capacity} (باقی‌مانده {remaining})', 'user-cards'),
+                'availabilityNoData' => __('برای این تاریخ ظرفیتی ثبت نشده است.', 'user-cards'),
             ],
         ]);
         wp_enqueue_script('uc-frontend');
