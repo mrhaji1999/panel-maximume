@@ -111,6 +111,18 @@ class UC_Ajax {
         if ($assigned_supervisor <= 0) {
             $assigned_supervisor = (int) get_post_meta((int)$card_id, 'ucb_default_supervisor', true);
         }
+        if ($assigned_supervisor <= 0 && class_exists('\\UCB\\Services\\CardService')) {
+            $card_service = new \UCB\Services\CardService();
+            $default_supervisor = (int) $card_service->get_default_supervisor((int) $card_id);
+            if ($default_supervisor > 0) {
+                $assigned_supervisor = $default_supervisor;
+            } elseif (method_exists($card_service, 'get_card_supervisors')) {
+                $supervisors = $card_service->get_card_supervisors((int) $card_id);
+                if (!empty($supervisors)) {
+                    $assigned_supervisor = (int) $supervisors[0];
+                }
+            }
+        }
         if ($assigned_supervisor <= 0) {
             $assigned_supervisor = (int) get_post_meta((int)$card_id, '_uc_supervisor_id', true);
         }
