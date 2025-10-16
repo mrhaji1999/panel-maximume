@@ -70,6 +70,10 @@ class ReservationService {
             'reservation_date'=> $normalized_date,
         ]);
 
+        $customer_service = new CustomerService();
+        $customer_service->assign_supervisor($customer_id, $supervisor_id);
+        $customer_service->set_card($customer_id, $card_id);
+
         $final_used = $used + 1;
         $remaining = max(0, $capacity - $final_used);
 
