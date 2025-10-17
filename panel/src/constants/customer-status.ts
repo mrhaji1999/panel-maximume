@@ -9,6 +9,10 @@ export const ALL_STATUSES: CustomerStatus[] = [
   'canceled',
 ]
 
+export const HIGHLIGHT_STATUSES: CustomerStatus[] = ['upsell_pending', 'upsell_paid']
+
+export const SECONDARY_STATUSES: CustomerStatus[] = ['upsell', 'normal', 'no_answer', 'canceled']
+
 export const STATUS_LABELS: Record<CustomerStatus, string> = {
   normal: 'عادی',
   upsell: 'خرید افزایشی',

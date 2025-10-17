@@ -27,7 +27,12 @@ import {
 } from '@/types'
 import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
 import { Filter, Loader2, MessageSquare, Search, Send, UserCheck, ExternalLink } from 'lucide-react'
-import { ALL_STATUSES, STATUS_LABELS } from '@/constants/customer-status'
+import {
+  ALL_STATUSES,
+  HIGHLIGHT_STATUSES,
+  SECONDARY_STATUSES,
+  STATUS_LABELS,
+} from '@/constants/customer-status'
 
 const PER_PAGE = 12
 type StatusFilter = 'all' | CustomerStatus
@@ -134,14 +139,12 @@ export function CustomersPage() {
 
   const statusTabs: StatusTab[] = useMemo(() => {
     const tabData = tabsQuery.data?.tabs ?? {}
-    const highlightStatuses: CustomerStatus[] = ['upsell_pending', 'upsell_paid']
-    const highlightTabs = highlightStatuses.map((status) => ({
+    const highlightTabs = HIGHLIGHT_STATUSES.map((status) => ({
       key: status,
       label: STATUS_LABELS[status],
       count: tabData[status]?.total,
     }))
-    const fallbackStatuses: CustomerStatus[] = ['upsell', 'normal', 'no_answer', 'canceled']
-    const remainingTabs = fallbackStatuses
+    const remainingTabs = SECONDARY_STATUSES
       .filter((status) => ALL_STATUSES.includes(status))
       .map((status) => ({
         key: status,

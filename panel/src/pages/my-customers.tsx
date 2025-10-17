@@ -25,7 +25,7 @@ import { formatNumber, getErrorMessage } from '@/lib/utils'
 import { NoteDialog } from '@/components/customers/note-dialog'
 import { AssignmentDialog } from '@/components/customers/assignment-dialog'
 import { CustomerCard } from './customers'
-import { STATUS_LABELS } from '@/constants/customer-status'
+import { HIGHLIGHT_STATUSES, SECONDARY_STATUSES, STATUS_LABELS } from '@/constants/customer-status'
 
 const PER_PAGE = 12
 
@@ -106,14 +106,20 @@ export function MyCustomersPage() {
 
   const statusTabs: StatusTab[] = useMemo(() => {
     const tabData = tabsQuery.data?.tabs ?? {}
+    const highlightTabs = HIGHLIGHT_STATUSES.map((status) => ({
+      key: status,
+      label: STATUS_LABELS[status],
+      count: tabData[status]?.total,
+    }))
+    const remainingTabs = SECONDARY_STATUSES.map((status) => ({
+      key: status,
+      label: STATUS_LABELS[status],
+    }))
+
     return [
       { key: 'all', label: 'همه', count: totalCustomers },
-      { key: 'upsell_pending', label: STATUS_LABELS.upsell_pending, count: tabData['upsell_pending']?.total },
-      { key: 'upsell_paid', label: STATUS_LABELS.upsell_paid, count: tabData['upsell_paid']?.total },
-      { key: 'upsell', label: STATUS_LABELS.upsell },
-      { key: 'normal', label: STATUS_LABELS.normal },
-      { key: 'no_answer', label: STATUS_LABELS.no_answer },
-      { key: 'canceled', label: STATUS_LABELS.canceled },
+      ...highlightTabs,
+      ...remainingTabs,
     ]
   }, [tabsQuery.data, totalCustomers])
 
