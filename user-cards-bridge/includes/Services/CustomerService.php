@@ -211,6 +211,11 @@ class CustomerService {
             'card_id'                  => $card_id,
             'card_title'               => $card_title,
             'random_code'              => get_user_meta($user_id, 'ucb_customer_random_code', true),
+            'upsell_field_key'         => get_user_meta($user_id, 'ucb_upsell_field_key', true) ?: null,
+            'upsell_field_label'       => get_user_meta($user_id, 'ucb_upsell_field_label', true) ?: null,
+            'upsell_amount'            => (float) get_user_meta($user_id, 'ucb_upsell_amount', true),
+            'upsell_order_id'          => (int) get_user_meta($user_id, 'ucb_upsell_order_id', true),
+            'upsell_pay_link'          => get_user_meta($user_id, 'ucb_upsell_pay_link', true) ?: null,
             'registered_at'            => mysql_to_rfc3339($user->user_registered),
         ];
     }

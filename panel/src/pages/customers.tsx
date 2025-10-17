@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   Card,
   CardContent,
@@ -12,37 +13,20 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { NoteDialog } from '@/components/customers/note-dialog'
-import { StatusDialog } from '@/components/customers/status-dialog'
 import { AssignmentDialog } from '@/components/customers/assignment-dialog'
-import { UpsellDrawer } from '@/components/customers/upsell-drawer'
-import {
-  customersApi,
-} from '@/lib/api'
+import { cardsApi, customersApi } from '@/lib/api'
 import { useAuth } from '@/store/authStore'
 import { useNotification } from '@/store/uiStore'
 import { useDebounce } from '@/hooks/useDebounce'
 import {
+  CardField,
   Customer,
   CustomerListResponse,
   CustomerStatus,
   CustomerTabsResponse,
 } from '@/types'
-import {
-  cn,
-  formatDateTime,
-  formatNumber,
-  getErrorMessage,
-} from '@/lib/utils'
-import {
-  Search,
-  Filter,
-  MoreHorizontal,
-  Send,
-  TrendingUp,
-  UserCheck,
-  MessageSquare,
-  PenTool,
-} from 'lucide-react'
+import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
+import { Filter, Loader2, MessageSquare, Search, Send, UserCheck, ExternalLink } from 'lucide-react'
 
 const PER_PAGE = 12
 type StatusFilter = 'all' | CustomerStatus
@@ -56,10 +40,23 @@ const ALL_STATUSES: CustomerStatus[] = [
   'canceled',
 ]
 
+const STATUS_LABELS: Record<CustomerStatus, string> = {
+  normal: 'عادی',
+  upsell: 'خرید افزایشی',
+  upsell_pending: 'خرید افزایشی در انتظار پرداخت',
+  upsell_paid: 'خرید افزایشی پرداخت شده',
+  no_answer: 'جواب نداد',
+  canceled: 'انصراف داد',
+}
+
 interface StatusTab {
   key: StatusFilter
   label: string
   count?: number
+}
+
+interface UpsellInitResponse {
+  pay_link?: string
 }
 
 export function CustomersPage() {
@@ -67,22 +64,40 @@ export function CustomersPage() {
   const { success: notifySuccess, error: notifyError, info: notifyInfo } = useNotification()
   const queryClient = useQueryClient()
 
+  const [searchParams, setSearchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('all')
   const [page, setPage] = useState(1)
 
-  const [statusDialog, setStatusDialog] = useState<{
-    customer: Customer
-    statuses: CustomerStatus[]
-  } | null>(null)
   const [noteDialogCustomer, setNoteDialogCustomer] = useState<Customer | null>(null)
   const [assignmentDialog, setAssignmentDialog] = useState<{
     type: 'supervisor' | 'agent'
     customer: Customer
   } | null>(null)
-  const [upsellCustomer, setUpsellCustomer] = useState<Customer | null>(null)
 
   const debouncedSearch = useDebounce(searchTerm, 450)
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status')
+
+    if (!statusParam) {
+      if (selectedStatus !== 'all') {
+        setSelectedStatus('all')
+      }
+      return
+    }
+
+    if (statusParam === 'all') {
+      if (selectedStatus !== 'all') {
+        setSelectedStatus('all')
+      }
+      return
+    }
+
+    if (ALL_STATUSES.includes(statusParam as CustomerStatus) && selectedStatus !== (statusParam as StatusFilter)) {
+      setSelectedStatus(statusParam as StatusFilter)
+    }
+  }, [searchParams, selectedStatus])
 
   useEffect(() => {
     setPage(1)
@@ -147,17 +162,35 @@ export function CustomersPage() {
     ]
   }, [tabsQuery.data, totalCustomers])
 
-  const updateStatusMutation = useMutation({
+  const handleChangeStatusFilter = (status: StatusFilter) => {
+    setSelectedStatus(status)
+    const params = new URLSearchParams(searchParams)
+    if (status === 'all') {
+      params.delete('status')
+    } else {
+      params.set('status', status)
+    }
+    params.delete('page')
+    setSearchParams(params)
+  }
+
+  const updateStatusMutation = useMutation<
+    unknown,
+    unknown,
+    { customerId: number; status: CustomerStatus; reason?: string; meta?: Record<string, unknown> }
+  >({
     mutationFn: async ({
       customerId,
       status,
       reason,
+      meta,
     }: {
       customerId: number
       status: CustomerStatus
       reason?: string
+      meta?: Record<string, unknown>
     }) => {
-      const response = await customersApi.updateCustomerStatus(customerId, status, reason)
+      const response = await customersApi.updateCustomerStatus(customerId, status, { reason, meta })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در تغییر وضعیت')
       }
@@ -173,7 +206,7 @@ export function CustomersPage() {
     },
   })
 
-  const sendNormalCodeMutation = useMutation({
+  const sendNormalCodeMutation = useMutation<unknown, unknown, number>({
     mutationFn: async (customerId: number) => {
       const response = await customersApi.sendNormalCode(customerId)
       if (!response.success) {
@@ -240,8 +273,12 @@ export function CustomersPage() {
     },
   })
 
-  const initUpsellMutation = useMutation({
-    mutationFn: async ({ customerId, cardId, fieldKey }: { customerId: number; cardId: number; fieldKey: string }) => {
+  const initUpsellMutation = useMutation<
+    UpsellInitResponse,
+    unknown,
+    { customerId: number; cardId: number; fieldKey: string }
+  >({
+    mutationFn: async ({ customerId, cardId, fieldKey }) => {
       const response = await customersApi.initUpsell(customerId, cardId, fieldKey)
       if (!response.success) {
         throw new Error(response.error?.message || 'ایجاد فروش افزایشی ناموفق بود')
@@ -264,22 +301,16 @@ export function CustomersPage() {
   const getCustomerName = (customer: Customer) =>
     customer.display_name || customer.email || `مشتری #${customer.id}`
 
-  const handleOpenStatusDialog = (customer: Customer) => {
-    const statuses = ALL_STATUSES.filter((status) => status !== customer.status)
-    setStatusDialog({
-      customer,
-      statuses: statuses.length > 0 ? statuses : ALL_STATUSES,
-    })
-  }
+  const handleStatusChange = async (customer: Customer, status: CustomerStatus) => {
+    if (status === 'upsell' && !customer.card_id) {
+      notifyError('کارت نامشخص', 'برای این مشتری کارت تعریف نشده است')
+      throw new Error('missing_card')
+    }
 
-  const handleStatusDialogSubmit = async ({ status, reason }: { status: string; reason?: string }) => {
-    if (!statusDialog?.customer) return
     await updateStatusMutation.mutateAsync({
-      customerId: statusDialog.customer.id,
-      status: status as CustomerStatus,
-      reason: reason || undefined,
+      customerId: customer.id,
+      status,
     })
-    setStatusDialog(null)
   }
 
   const handleOpenNoteDialog = (customer: Customer) => {
@@ -313,26 +344,21 @@ export function CustomersPage() {
     setAssignmentDialog(null)
   }
 
-  const handleOpenUpsell = (customer: Customer) => {
+  const handleSendNormalCode = async (customer: Customer) => {
+    await sendNormalCodeMutation.mutateAsync(customer.id)
+  }
+
+  const handleStartUpsell = async (customer: Customer, fieldKey: string) => {
     if (!customer.card_id) {
       notifyError('کارت نامشخص', 'برای این مشتری کارت تعریف نشده است')
-      return
+      throw new Error('missing_card')
     }
-    setUpsellCustomer(customer)
-  }
 
-  const handleUpsellSubmit = async ({ field_key }: { field_key: string }) => {
-    if (!upsellCustomer?.card_id) return
     await initUpsellMutation.mutateAsync({
-      customerId: upsellCustomer.id,
-      cardId: upsellCustomer.card_id,
-      fieldKey: field_key,
+      customerId: customer.id,
+      cardId: customer.card_id,
+      fieldKey,
     })
-    setUpsellCustomer(null)
-  }
-
-  const handleSendNormalCode = (customer: Customer) => {
-    sendNormalCodeMutation.mutate(customer.id)
   }
 
   const isMutating =
@@ -375,7 +401,7 @@ export function CustomersPage() {
           <Button
             key={tab.key}
             variant={selectedStatus === tab.key ? 'default' : 'outline'}
-            onClick={() => setSelectedStatus(tab.key)}
+            onClick={() => handleChangeStatusFilter(tab.key)}
             className="gap-2"
           >
             <span>{tab.label}</span>
@@ -397,23 +423,27 @@ export function CustomersPage() {
         </CardHeader>
         <CardContent>
           {customersQuery.isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, index) => (
-                <Card key={index} className="animate-pulse">
-                  <CardContent className="space-y-4 p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full bg-muted" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 w-3/4 rounded bg-muted" />
-                        <div className="h-3 w-1/2 rounded bg-muted" />
+                <div key={index} className="animate-pulse rounded-lg border border-dashed bg-muted/20 p-6">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-muted" />
+                        <div className="space-y-2">
+                          <div className="h-4 w-32 rounded bg-muted" />
+                          <div className="h-3 w-24 rounded bg-muted" />
+                        </div>
                       </div>
+                      <div className="h-9 w-48 rounded bg-muted" />
                     </div>
-                    <div className="space-y-2">
-                      <div className="h-3 w-full rounded bg-muted" />
-                      <div className="h-3 w-5/6 rounded bg-muted" />
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <div className="h-3 rounded bg-muted" />
+                      <div className="h-3 rounded bg-muted" />
+                      <div className="h-3 rounded bg-muted" />
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
           ) : customersQuery.isError ? (
@@ -425,18 +455,31 @@ export function CustomersPage() {
               مشتری مطابق با فیلترهای فعلی یافت نشد.
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-3">
               {customers.map((customer: Customer) => (
                 <CustomerCard
                   key={customer.id}
                   customer={customer}
                   disabled={isMutating}
-                  onOpenStatusDialog={handleOpenStatusDialog}
+                  onStatusChange={handleStatusChange}
                   onSendNormalCode={handleSendNormalCode}
+                  onStartUpsell={handleStartUpsell}
                   onOpenNoteDialog={handleOpenNoteDialog}
                   onOpenAssignSupervisor={(c) => handleOpenAssignment('supervisor', c)}
                   onOpenAssignAgent={(c) => handleOpenAssignment('agent', c)}
-                  onOpenUpsell={handleOpenUpsell}
+                  statusUpdatingId={
+                    updateStatusMutation.isPending
+                      ? (updateStatusMutation.variables?.customerId ?? null)
+                      : null
+                  }
+                  normalSmsCustomerId={
+                    sendNormalCodeMutation.isPending ? sendNormalCodeMutation.variables ?? null : null
+                  }
+                  upsellCustomerId={
+                    initUpsellMutation.isPending
+                      ? (initUpsellMutation.variables?.customerId ?? null)
+                      : null
+                  }
                 />
               ))}
             </div>
@@ -468,18 +511,6 @@ export function CustomersPage() {
         </CardContent>
       </Card>
 
-      <StatusDialog
-        open={Boolean(statusDialog)}
-        onOpenChange={(open) => {
-          if (!open) setStatusDialog(null)
-        }}
-        customerName={statusDialog ? getCustomerName(statusDialog.customer) : ''}
-        currentStatus={statusDialog?.customer.status ?? 'normal'}
-        selectableStatuses={statusDialog?.statuses ?? ALL_STATUSES}
-        isSubmitting={updateStatusMutation.isPending}
-        onSubmit={handleStatusDialogSubmit}
-      />
-
       <NoteDialog
         open={Boolean(noteDialogCustomer)}
         onOpenChange={(open) => {
@@ -507,17 +538,6 @@ export function CustomersPage() {
         onSubmit={handleAssignmentSubmit}
         supervisorFilter={user?.role === 'supervisor' ? user.id : undefined}
       />
-
-      <UpsellDrawer
-        open={Boolean(upsellCustomer)}
-        onOpenChange={(open) => {
-          if (!open) setUpsellCustomer(null)
-        }}
-        customerName={upsellCustomer ? getCustomerName(upsellCustomer) : ''}
-        cardId={upsellCustomer?.card_id ?? 0}
-        isSubmitting={initUpsellMutation.isPending}
-        onSubmit={handleUpsellSubmit}
-      />
     </div>
   )
 }
@@ -525,121 +545,225 @@ export function CustomersPage() {
 interface CustomerCardProps {
   customer: Customer
   disabled: boolean
-  onOpenStatusDialog: (customer: Customer) => void
-  onSendNormalCode: (customer: Customer) => void
+  onStatusChange: (customer: Customer, status: CustomerStatus) => Promise<void>
+  onSendNormalCode: (customer: Customer) => Promise<void>
+  onStartUpsell: (customer: Customer, fieldKey: string) => Promise<void>
   onOpenNoteDialog: (customer: Customer) => void
   onOpenAssignSupervisor: (customer: Customer) => void
   onOpenAssignAgent: (customer: Customer) => void
-  onOpenUpsell: (customer: Customer) => void
+  statusUpdatingId: number | null
+  normalSmsCustomerId: number | null
+  upsellCustomerId: number | null
 }
 
 function CustomerCard({
   customer,
   disabled,
-  onOpenStatusDialog,
+  onStatusChange,
   onSendNormalCode,
+  onStartUpsell,
   onOpenNoteDialog,
   onOpenAssignSupervisor,
   onOpenAssignAgent,
-  onOpenUpsell,
+  statusUpdatingId,
+  normalSmsCustomerId,
+  upsellCustomerId,
 }: CustomerCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [selectedStatus, setSelectedStatus] = useState<CustomerStatus>(customer.status)
+  const [selectedField, setSelectedField] = useState<string>(customer.upsell_field_key ?? '')
+
+  const isStatusUpdating = statusUpdatingId === customer.id
+  const isNormalSending = normalSmsCustomerId === customer.id
+  const isUpsellSubmitting = upsellCustomerId === customer.id
+  const rowDisabled = disabled || isStatusUpdating
+
+  const showUpsellControls = selectedStatus === 'upsell'
+
+  const {
+    data: cardFields = [],
+    isLoading: fieldsLoading,
+    isError: fieldsError,
+    error: fieldsErrorObject,
+  } = useQuery<CardField[]>({
+    queryKey: ['card-fields', customer.card_id],
+    enabled: showUpsellControls && customer.card_id > 0,
+    queryFn: async () => {
+      const response = await cardsApi.getCardFields(customer.card_id)
+      if (!response.success) {
+        throw new Error(response.error?.message || 'خطا در دریافت فیلدهای کارت')
+      }
+      return response.data?.fields ?? []
+    },
+  })
+
+  const fields = cardFields
+  const selectedFieldMeta = fields.find((field) => field.key === selectedField)
+
+  useEffect(() => {
+    setSelectedStatus(customer.status)
+    if (customer.status !== 'upsell') {
+      setSelectedField('')
+    }
+  }, [customer.status])
+
+  const handleStatusSelect = async (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextStatus = event.target.value as CustomerStatus
+    if (nextStatus === selectedStatus) {
+      return
+    }
+
+    setSelectedStatus(nextStatus)
+
+    try {
+      await onStatusChange(customer, nextStatus)
+      if (nextStatus !== 'upsell') {
+        setSelectedField('')
+      }
+    } catch (error) {
+      setSelectedStatus(customer.status)
+      if (customer.status !== 'upsell') {
+        setSelectedField('')
+      }
+    }
+  }
+
+  const handleNormalSms = async () => {
+    await onSendNormalCode(customer)
+  }
+
+  const handleUpsellSubmit = async () => {
+    if (!selectedField) {
+      return
+    }
+
+    try {
+      await onStartUpsell(customer, selectedField)
+      setSelectedField('')
+      setSelectedStatus('upsell_pending')
+    } catch (error) {
+      // ignore - notification handled upstream
+    }
+  }
 
   return (
-    <Card className="relative overflow-hidden">
+    <Card className="overflow-hidden">
       <CardContent className="space-y-4 p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-1 items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-              {customer.display_name?.charAt(0) ?? '?'}
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-semibold text-foreground">
+                {customer.display_name || customer.email}
+              </h3>
+              <StatusBadge status={customer.status} />
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-foreground">
-                  {customer.display_name || customer.email}
-                </h3>
-                <StatusBadge status={customer.status} />
-              </div>
-              <p className="text-sm text-muted-foreground">{customer.email}</p>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {customer.card_title && (
-                  <Badge variant="secondary">کارت: {customer.card_title}</Badge>
-                )}
-                {customer.assigned_supervisor_name && (
-                  <Badge variant="outline">سرپرست: {customer.assigned_supervisor_name}</Badge>
-                )}
-                {customer.assigned_agent_name && (
-                  <Badge variant="outline">کارشناس: {customer.assigned_agent_name}</Badge>
-                )}
-              </div>
+            <p className="text-sm text-muted-foreground">{customer.email}</p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {customer.card_title && <Badge variant="secondary">کارت: {customer.card_title}</Badge>}
+              {customer.assigned_supervisor_name && (
+                <Badge variant="outline">سرپرست: {customer.assigned_supervisor_name}</Badge>
+              )}
+              {customer.assigned_agent_name && (
+                <Badge variant="outline">کارشناس: {customer.assigned_agent_name}</Badge>
+              )}
+              {customer.upsell_order_id ? (
+                <Badge variant="outline">سفارش #{formatNumber(customer.upsell_order_id)}</Badge>
+              ) : null}
             </div>
           </div>
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setMenuOpen((prev) => !prev)}
-              disabled={disabled}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-            {menuOpen && (
-              <div className="absolute left-0 top-full z-20 mt-2 w-56 rounded-md border bg-background p-1 shadow-lg">
-                <ActionMenuItem
-                  icon={TrendingUp}
-                  label="تغییر وضعیت"
-                  onClick={() => {
-                    onOpenStatusDialog(customer)
-                    setMenuOpen(false)
-                  }}
-                />
-                <ActionMenuItem
-                  icon={Send}
-                  label="ارسال پیامک کد عادی"
-                  onClick={() => {
-                    onSendNormalCode(customer)
-                    setMenuOpen(false)
-                  }}
-                />
-                <ActionMenuItem
-                  icon={MessageSquare}
-                  label="افزودن یادداشت"
-                  onClick={() => {
-                    onOpenNoteDialog(customer)
-                    setMenuOpen(false)
-                  }}
-                />
-                <ActionMenuItem
-                  icon={PenTool}
-                  label="خرید افزایشی"
-                  onClick={() => {
-                    onOpenUpsell(customer)
-                    setMenuOpen(false)
-                  }}
-                />
-                <ActionMenuItem
-                  icon={UserCheck}
-                  label="تخصیص سرپرست"
-                  onClick={() => {
-                    onOpenAssignSupervisor(customer)
-                    setMenuOpen(false)
-                  }}
-                />
-                <ActionMenuItem
-                  icon={UserCheck}
-                  label="تخصیص کارشناس"
-                  onClick={() => {
-                    onOpenAssignAgent(customer)
-                    setMenuOpen(false)
-                  }}
-                />
-              </div>
-            )}
+
+          <div className="flex flex-col gap-2">
+            <span className="text-xs text-muted-foreground">تغییر وضعیت</span>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+              <select
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                value={selectedStatus}
+                onChange={handleStatusSelect}
+                disabled={rowDisabled}
+              >
+                {ALL_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+
+              {selectedStatus === 'normal' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="sm:w-auto"
+                  disabled={rowDisabled || isNormalSending}
+                  onClick={handleNormalSms}
+                >
+                  {isNormalSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">ارسال پیامک</span>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-2 text-xs text-muted-foreground">
+        {showUpsellControls && (
+          <div className="space-y-3 rounded-lg border border-dashed bg-muted/20 p-4">
+            {customer.card_id ? (
+              fieldsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>در حال دریافت فیلدها...</span>
+                </div>
+              ) : fieldsError ? (
+                <p className="text-sm text-destructive">{getErrorMessage(fieldsErrorObject)}</p>
+              ) : fields.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  فیلدی برای این کارت ثبت نشده است. ابتدا گزینه‌های فروش افزایشی کارت را تعریف کنید.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary md:w-80"
+                    value={selectedField}
+                    onChange={(event) => setSelectedField(event.target.value)}
+                    disabled={isUpsellSubmitting}
+                  >
+                    <option value="">یکی از گزینه‌ها را انتخاب کنید</option>
+                    {fields.map((field) => (
+                      <option key={field.key} value={field.key}>
+                        {field.label} - {formatNumber(field.amount)} تومان
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    disabled={isUpsellSubmitting || !selectedField}
+                    onClick={handleUpsellSubmit}
+                  >
+                    {isUpsellSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                    <span className="ml-2">ارسال پیامک پرداخت</span>
+                  </Button>
+                </div>
+              )
+            ) : (
+              <p className="text-sm text-destructive">برای این مشتری کارت ثبت نشده است.</p>
+            )}
+
+            {selectedFieldMeta && (
+              <div className="flex flex-col gap-1 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
+                <span>گزینه انتخاب‌شده: {selectedFieldMeta.label}</span>
+                <span>مبلغ: {formatNumber(selectedFieldMeta.amount)} تومان</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
           {customer.phone && (
             <div className="flex items-center justify-between">
               <span>تلفن:</span>
@@ -649,35 +773,57 @@ function CustomerCard({
           {customer.registered_at && (
             <div className="flex items-center justify-between">
               <span>تاریخ ثبت‌نام:</span>
-              <span className="font-medium text-foreground">
-                {formatDateTime(customer.registered_at)}
-              </span>
+              <span className="font-medium text-foreground">{formatDateTime(customer.registered_at)}</span>
+            </div>
+          )}
+          {customer.upsell_pay_link && (
+            <div className="col-span-1 md:col-span-3">
+              <span className="text-xs">آخرین لینک پرداخت:</span>
+              <div className="mt-1 truncate text-[0.75rem] text-primary">
+                <a
+                  href={customer.upsell_pay_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span className="truncate">{customer.upsell_pay_link}</span>
+                </a>
+              </div>
             </div>
           )}
         </div>
+
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenNoteDialog(customer)}
+            disabled={disabled}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="ml-2">یادداشت</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenAssignSupervisor(customer)}
+            disabled={disabled}
+          >
+            <UserCheck className="h-4 w-4" />
+            <span className="ml-2">سرپرست</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenAssignAgent(customer)}
+            disabled={disabled}
+          >
+            <UserCheck className="h-4 w-4" />
+            <span className="ml-2">کارشناس</span>
+          </Button>
+        </div>
       </CardContent>
     </Card>
-  )
-}
-
-interface ActionMenuItemProps {
-  icon: ComponentType<{ className?: string }>
-  label: string
-  onClick: () => void
-}
-
-function ActionMenuItem({ icon: Icon, label, onClick }: ActionMenuItemProps) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-right text-sm transition',
-        'hover:bg-muted'
-      )}
-      onClick={onClick}
-    >
-      <span>{label}</span>
-      <Icon className="h-4 w-4 text-muted-foreground" />
-    </button>
   )
 }
