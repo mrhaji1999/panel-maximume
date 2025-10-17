@@ -2,6 +2,8 @@ import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { format, parseISO, isValid } from 'date-fns'
 import { faIR } from 'date-fns/locale'
+import type { CustomerStatus } from '@/types'
+import { STATUS_COLORS, STATUS_LABELS } from '@/constants/customer-status'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -28,27 +30,11 @@ export function formatTime(date: string | Date): string {
 
 // Status utilities
 export function getStatusLabel(status: string): string {
-  const statusLabels: Record<string, string> = {
-    'no_answer': 'جواب نداد',
-    'canceled': 'انصراف داد',
-    'upsell': 'خرید افزایشی',
-    'normal': 'عادی',
-    'upsell_pending': 'خرید افزایشی در انتظار پرداخت',
-    'upsell_paid': 'خرید افزایشی پرداخت شده',
-  }
-  return statusLabels[status] || status
+  return STATUS_LABELS[status as CustomerStatus] ?? status
 }
 
 export function getStatusColor(status: string): string {
-  const statusColors: Record<string, string> = {
-    'no_answer': 'status-no-answer',
-    'canceled': 'status-canceled',
-    'upsell': 'status-upsell',
-    'normal': 'status-normal',
-    'upsell_pending': 'status-upsell-pending',
-    'upsell_paid': 'status-upsell-paid',
-  }
-  return statusColors[status] || 'bg-gray-100 text-gray-800'
+  return STATUS_COLORS[status as CustomerStatus] ?? 'bg-gray-100 text-gray-800'
 }
 
 // Role utilities

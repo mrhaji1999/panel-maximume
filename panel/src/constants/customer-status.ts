@@ -17,3 +17,12 @@ export const STATUS_LABELS: Record<CustomerStatus, string> = {
   no_answer: 'جواب نداد',
   canceled: 'انصراف داد',
 }
+
+export const STATUS_COLORS: Record<CustomerStatus, string> = {
+  normal: 'status-normal',
+  upsell: 'status-upsell',
+  upsell_pending: 'status-upsell-pending',
+  upsell_paid: 'status-upsell-paid',
+  no_answer: 'status-no-answer',
+  canceled: 'status-canceled',
+}

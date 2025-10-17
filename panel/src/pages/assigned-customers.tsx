@@ -24,6 +24,7 @@ import {
 import { formatNumber, getErrorMessage } from '@/lib/utils'
 import { NoteDialog } from '@/components/customers/note-dialog'
 import { CustomerCard } from './customers'
+import { STATUS_LABELS } from '@/constants/customer-status'
 
 const PER_PAGE = 12
 
@@ -118,12 +119,12 @@ export function AssignedCustomersPage() {
     const tabData = tabsQuery.data?.tabs ?? {}
     return [
       { key: 'all', label: 'همه', count: totalCustomers },
-      { key: 'upsell_pending', label: 'در انتظار پرداخت', count: tabData['upsell_pending']?.total },
-      { key: 'upsell_paid', label: 'پرداخت شده', count: tabData['upsell_paid']?.total },
-      { key: 'upsell', label: 'فروش افزایشی' },
-      { key: 'normal', label: 'عادی' },
-      { key: 'no_answer', label: 'جواب نداد' },
-      { key: 'canceled', label: 'انصراف داد' },
+      { key: 'upsell_pending', label: STATUS_LABELS.upsell_pending, count: tabData['upsell_pending']?.total },
+      { key: 'upsell_paid', label: STATUS_LABELS.upsell_paid, count: tabData['upsell_paid']?.total },
+      { key: 'upsell', label: STATUS_LABELS.upsell },
+      { key: 'normal', label: STATUS_LABELS.normal },
+      { key: 'no_answer', label: STATUS_LABELS.no_answer },
+      { key: 'canceled', label: STATUS_LABELS.canceled },
     ]
   }, [tabsQuery.data, totalCustomers])
 
