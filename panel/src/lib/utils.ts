@@ -31,10 +31,10 @@ export function getStatusLabel(status: string): string {
   const statusLabels: Record<string, string> = {
     'no_answer': 'جواب نداد',
     'canceled': 'انصراف داد',
-    'upsell': 'فروش افزایشی',
+    'upsell': 'خرید افزایشی',
     'normal': 'عادی',
-    'upsell_pending': 'در انتظار پرداخت',
-    'upsell_paid': 'پرداخت شده',
+    'upsell_pending': 'خرید افزایشی در انتظار پرداخت',
+    'upsell_paid': 'خرید افزایشی پرداخت شده',
   }
   return statusLabels[status] || status
 }

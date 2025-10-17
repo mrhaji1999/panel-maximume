@@ -245,8 +245,16 @@ export const customersApi = {
   getCustomer: (id: number) =>
     apiClient.get<CustomerDetail>(`/customers/${id}`),
   
-  updateCustomerStatus: (id: number, status: string, reason?: string) =>
-    apiClient.patch(`/customers/${id}/status`, { status, reason }),
+  updateCustomerStatus: (
+    id: number,
+    status: string,
+    options?: { reason?: string; meta?: Record<string, unknown> }
+  ) =>
+    apiClient.patch(`/customers/${id}/status`, {
+      status,
+      ...(options?.reason ? { reason: options.reason } : {}),
+      ...(options?.meta ? { meta: options.meta } : {}),
+    }),
   
   addCustomerNote: (id: number, note: string) =>
     apiClient.post(`/customers/${id}/notes`, { note }),
