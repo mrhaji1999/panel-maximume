@@ -2,8 +2,7 @@ import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { format, parseISO, isValid } from 'date-fns'
 import { faIR } from 'date-fns/locale'
-import type { CustomerStatus } from '@/types'
-import { STATUS_COLORS, STATUS_LABELS } from '@/constants/customer-status'
+import { STATUS_COLORS, STATUS_LABELS, isCustomerStatus } from '@/constants/customer-status'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -30,11 +29,11 @@ export function formatTime(date: string | Date): string {
 
 // Status utilities
 export function getStatusLabel(status: string): string {
-  return STATUS_LABELS[status as CustomerStatus] ?? status
+  return isCustomerStatus(status) ? STATUS_LABELS[status] : status
 }
 
 export function getStatusColor(status: string): string {
-  return STATUS_COLORS[status as CustomerStatus] ?? 'bg-gray-100 text-gray-800'
+  return isCustomerStatus(status) ? STATUS_COLORS[status] : 'bg-gray-100 text-gray-800'
 }
 
 // Role utilities

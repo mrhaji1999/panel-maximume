@@ -32,6 +32,7 @@ import {
   HIGHLIGHT_STATUSES,
   SECONDARY_STATUSES,
   STATUS_LABELS,
+  isCustomerStatus,
 } from '@/constants/customer-status'
 
 const PER_PAGE = 12
@@ -82,7 +83,7 @@ export function CustomersPage() {
       return
     }
 
-    if (ALL_STATUSES.includes(statusParam as CustomerStatus) && selectedStatus !== (statusParam as StatusFilter)) {
+    if (isCustomerStatus(statusParam) && selectedStatus !== (statusParam as StatusFilter)) {
       setSelectedStatus(statusParam as StatusFilter)
     }
   }, [searchParams, selectedStatus])
@@ -149,6 +150,7 @@ export function CustomersPage() {
       .map((status) => ({
         key: status,
         label: STATUS_LABELS[status],
+        count: tabData[status]?.total,
       }))
 
     return [

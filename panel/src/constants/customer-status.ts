@@ -30,3 +30,7 @@ export const STATUS_COLORS: Record<CustomerStatus, string> = {
   no_answer: 'status-no-answer',
   canceled: 'status-canceled',
 }
+
+export function isCustomerStatus(value: string): value is CustomerStatus {
+  return (ALL_STATUSES as string[]).includes(value)
+}
