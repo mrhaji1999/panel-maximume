@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -11,6 +11,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Search,
   Plus,
@@ -44,11 +52,26 @@ export function AgentsPage() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [page, setPage] = useState(1)
+  const [createAgentOpen, setCreateAgentOpen] = useState(false)
+  const defaultAgentForm = () => ({
+    username: '',
+    email: '',
+    password: '',
+    display_name: '',
+    supervisor_id: user?.role === 'supervisor' && user?.id ? String(user.id) : '',
+  })
+  const [newAgentForm, setNewAgentForm] = useState(defaultAgentForm)
   const debouncedSearch = useDebounce(searchTerm, 400)
 
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch, supervisorId])
+
+  useEffect(() => {
+    if (createAgentOpen) {
+      setNewAgentForm(defaultAgentForm())
+    }
+  }, [createAgentOpen, user])
 
   const filters: AgentFilters = useMemo(() => {
     const params: AgentFilters = {
@@ -97,11 +120,53 @@ export function AgentsPage() {
     },
   })
 
+  const createAgentMutation = useMutation({
+    mutationFn: async ({
+      username,
+      email,
+      password,
+      display_name,
+      supervisor_id,
+    }: {
+      username: string
+      email: string
+      password: string
+      display_name: string
+      supervisor_id?: number
+    }) => {
+      const payload: Record<string, unknown> = {
+        username,
+        email,
+        password,
+        display_name,
+      }
+
+      if (typeof supervisor_id === 'number' && supervisor_id > 0) {
+        payload.supervisor_id = supervisor_id
+      }
+
+      const response = await usersApi.createAgent(payload)
+      if (!response.success) {
+        throw new Error(response.error?.message || 'ایجاد کارشناس ناموفق بود')
+      }
+      return response.data
+    },
+    onSuccess: () => {
+      success('کارشناس ایجاد شد', 'کارشناس جدید با موفقیت ثبت شد')
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      setCreateAgentOpen(false)
+      setNewAgentForm(defaultAgentForm())
+    },
+    onError: (error) => {
+      notifyError('خطا در ایجاد کارشناس', getErrorMessage(error))
+    },
+  })
+
   const agents = agentsQuery.data?.items ?? []
   const pagination = agentsQuery.data?.pagination
   const totalPages = pagination?.total_pages ?? 1
   const total = pagination?.total ?? 0
-  const isMutating = changeSupervisorMutation.isPending
+  const isMutating = changeSupervisorMutation.isPending || createAgentMutation.isPending
 
   const handleChangeSupervisor = (agent: Agent, closeMenu: () => void) => {
     closeMenu()
@@ -142,6 +207,49 @@ export function AgentsPage() {
     navigate(`/customers?agent_id=${agent.id}`)
   }
 
+  const handleCreateAgentInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target
+    setNewAgentForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleCreateAgentSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (
+      !newAgentForm.username.trim() ||
+      !newAgentForm.email.trim() ||
+      !newAgentForm.password.trim() ||
+      !newAgentForm.display_name.trim()
+    ) {
+      notifyError('اطلاعات ناقص', 'لطفاً تمام فیلدهای اجباری را تکمیل کنید')
+      return
+    }
+
+    let supervisorValue: number | undefined
+
+    if (user?.role === 'supervisor') {
+      supervisorValue = user.id
+    } else {
+      if (!newAgentForm.supervisor_id.trim()) {
+        notifyError('شناسه سرپرست الزامی است', 'برای ایجاد کارشناس باید یک سرپرست تعیین کنید')
+        return
+      }
+      supervisorValue = Number(newAgentForm.supervisor_id.trim())
+      if (Number.isNaN(supervisorValue) || supervisorValue <= 0) {
+        notifyError('شناسه نامعتبر', 'شناسه سرپرست باید یک عدد معتبر باشد')
+        return
+      }
+    }
+
+    await createAgentMutation.mutateAsync({
+      username: newAgentForm.username.trim(),
+      email: newAgentForm.email.trim(),
+      password: newAgentForm.password,
+      display_name: newAgentForm.display_name.trim(),
+      supervisor_id: supervisorValue,
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -151,9 +259,13 @@ export function AgentsPage() {
             لیست کارشناسان فعال سامانه و وضعیت تخصیص سرپرست و مشتریان آن‌ها
           </p>
         </div>
-        <Button disabled className="gap-2">
+        <Button
+          className="gap-2"
+          onClick={() => setCreateAgentOpen(true)}
+          disabled={createAgentMutation.isPending}
+        >
           <Plus className="h-4 w-4" />
-          کارشناس جدید (به‌زودی)
+          کارشناس جدید
         </Button>
       </div>
 
@@ -253,6 +365,124 @@ export function AgentsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={createAgentOpen}
+        onOpenChange={(open) => {
+          setCreateAgentOpen(open)
+          if (!open) {
+            setNewAgentForm(defaultAgentForm())
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>ایجاد کارشناس جدید</DialogTitle>
+            <DialogDescription>
+              اطلاعات کارشناس را وارد کنید تا حساب کاربری ایجاد شود.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleCreateAgentSubmit}>
+            <div className="grid gap-3">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="agent-username">
+                  نام کاربری
+                </label>
+                <Input
+                  id="agent-username"
+                  name="username"
+                  value={newAgentForm.username}
+                  onChange={handleCreateAgentInputChange}
+                  placeholder="username"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="agent-email">
+                  ایمیل
+                </label>
+                <Input
+                  id="agent-email"
+                  name="email"
+                  type="email"
+                  value={newAgentForm.email}
+                  onChange={handleCreateAgentInputChange}
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="agent-password">
+                  رمز عبور اولیه
+                </label>
+                <Input
+                  id="agent-password"
+                  name="password"
+                  type="password"
+                  value={newAgentForm.password}
+                  onChange={handleCreateAgentInputChange}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="agent-display-name">
+                  نام نمایشی
+                </label>
+                <Input
+                  id="agent-display-name"
+                  name="display_name"
+                  value={newAgentForm.display_name}
+                  onChange={handleCreateAgentInputChange}
+                  placeholder="نام و نام خانوادگی"
+                  required
+                />
+              </div>
+              {user?.role !== 'supervisor' && (
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-foreground" htmlFor="agent-supervisor">
+                    شناسه سرپرست مرتبط
+                  </label>
+                  <Input
+                    id="agent-supervisor"
+                    name="supervisor_id"
+                    value={newAgentForm.supervisor_id}
+                    onChange={handleCreateAgentInputChange}
+                    placeholder="مثلاً 42"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    شناسه کاربری سرپرستی که این کارشناس زیر مجموعه او خواهد بود را وارد کنید.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCreateAgentOpen(false)
+                  setNewAgentForm(defaultAgentForm())
+                }}
+                disabled={createAgentMutation.isPending}
+              >
+                انصراف
+              </Button>
+              <Button type="submit" disabled={createAgentMutation.isPending}>
+                {createAgentMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span className="ml-2">ثبت کارشناس</span>
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

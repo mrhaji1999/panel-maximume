@@ -91,8 +91,17 @@ class Upsell extends BaseController {
             return $this->from_wp_error($sms_result);
         }
 
+        update_user_meta($customer_id, 'ucb_upsell_field_key', $selected['key']);
+        update_user_meta($customer_id, 'ucb_upsell_field_label', $selected['label']);
+        update_user_meta($customer_id, 'ucb_upsell_amount', (float) $selected['amount']);
+        update_user_meta($customer_id, 'ucb_upsell_pay_link', $order['pay_link']);
+
         $this->statuses->change_status($customer_id, 'upsell_pending', get_current_user_id(), [
-            'order_id' => $order['order_id'],
+            'order_id'   => $order['order_id'],
+            'field_key'  => $selected['key'],
+            'field_label'=> $selected['label'],
+            'amount'     => (float) $selected['amount'],
+            'pay_link'   => $order['pay_link'],
         ]);
 
         return $this->success([

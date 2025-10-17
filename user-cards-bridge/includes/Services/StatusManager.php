@@ -408,17 +408,22 @@ class StatusManager {
      */
     private function handle_normal_status($customer_id, $meta) {
         // Generate random code
-        $random_code = wp_generate_password(6, false);
-        
+        $random_code = strtoupper(wp_generate_password(8, false, false));
+
         // Store code in user meta
         update_user_meta($customer_id, 'ucb_customer_random_code', $random_code);
-        
-        // Send SMS with code
-        $phone = get_user_meta($customer_id, 'ucb_customer_phone', true);
+
+        $phone = get_user_meta($customer_id, 'phone', true);
+        if (!$phone) {
+            $phone = get_user_meta($customer_id, 'billing_phone', true);
+        }
+
         if ($phone) {
+            update_user_meta($customer_id, 'ucb_customer_phone', $phone);
+
             $sms = new \UCB\SMS\PayamakPanel();
             $body_id = get_option('ucb_sms_normal_body_id', '');
-            
+
             if ($body_id) {
                 $sms->send($customer_id, $phone, $body_id, [$random_code], get_current_user_id());
             }
@@ -433,15 +438,36 @@ class StatusManager {
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_order_id', $meta['order_id']);
         }
+
+        if (isset($meta['field_key'])) {
+            update_user_meta($customer_id, 'ucb_upsell_field_key', sanitize_text_field($meta['field_key']));
+        }
+
+        if (isset($meta['field_label'])) {
+            update_user_meta($customer_id, 'ucb_upsell_field_label', sanitize_text_field($meta['field_label']));
+        }
+
+        if (isset($meta['amount'])) {
+            update_user_meta($customer_id, 'ucb_upsell_amount', floatval($meta['amount']));
+        }
+
+        if (isset($meta['pay_link'])) {
+            update_user_meta($customer_id, 'ucb_upsell_pay_link', esc_url_raw($meta['pay_link']));
+        }
     }
     
     /**
      * Handle upsell paid status
      */
     private function handle_upsell_paid_status($customer_id, $meta) {
-        // Clear pending order info
+        // Clear pending order info but keep audit trail
+        if (isset($meta['order_id'])) {
+            update_user_meta($customer_id, 'ucb_upsell_last_order_id', $meta['order_id']);
+        }
+
         delete_user_meta($customer_id, 'ucb_upsell_order_id');
-        
+        delete_user_meta($customer_id, 'ucb_upsell_pay_link');
+
         // Log successful payment
         \UCB\Logger::log('info', 'Upsell payment completed', [
             'customer_id' => $customer_id,

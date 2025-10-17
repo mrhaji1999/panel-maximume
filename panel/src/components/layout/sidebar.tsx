@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import type { Location } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth, useAuthActions } from '@/store/authStore'
 import { useSidebar } from '@/store/uiStore'
@@ -71,6 +72,24 @@ const navigation = [
     href: '/customers',
     icon: Users,
     roles: ['company_manager'] as const,
+  },
+  {
+    name: 'خرید افزایشی - در انتظار پرداخت',
+    href: '/customers',
+    icon: Users,
+    roles: ['company_manager'] as const,
+    search: '?status=upsell_pending',
+    match: (location: Location) =>
+      location.pathname === '/customers' && new URLSearchParams(location.search).get('status') === 'upsell_pending',
+  },
+  {
+    name: 'خرید افزایشی - پرداخت شده',
+    href: '/customers',
+    icon: Users,
+    roles: ['company_manager'] as const,
+    search: '?status=upsell_paid',
+    match: (location: Location) =>
+      location.pathname === '/customers' && new URLSearchParams(location.search).get('status') === 'upsell_paid',
   },
   {
     name: 'زمان‌بندی',
@@ -161,13 +180,16 @@ export function Sidebar() {
           {userRole ? (
             <nav className="flex-1 space-y-1 p-4">
               {visibleNavigation.map((item) => {
-                  const isActive = location.pathname === item.href
+                  const isActive =
+                    typeof item.match === 'function'
+                      ? item.match(location)
+                      : location.pathname === item.href
                   const Icon = item.icon
 
                   return (
                     <Link
                       key={item.name}
-                      to={item.href}
+                      to={`${item.href}${item.search ?? ''}`}
                       className={cn(
                         'flex items-center space-x-3 space-x-reverse rounded-md px-3 py-2 text-sm font-medium transition-colors',
                         isActive

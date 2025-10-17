@@ -33,6 +33,11 @@ export interface Customer {
   phone?: string | null
   registered_at?: string
   random_code?: string | null
+  upsell_field_key?: string | null
+  upsell_field_label?: string | null
+  upsell_amount?: number
+  upsell_order_id?: number
+  upsell_pay_link?: string | null
 }
 
 export interface CustomerDetail extends Customer {
