@@ -77,9 +77,9 @@ function PublicRoute({ children }: { children: ReactNode }) {
 
 function MainLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background lg:flex lg:flex-row-reverse">
+    <div className="min-h-screen bg-background lg:flex lg:flex-row">
       <Sidebar />
-      <div className="flex-1 lg:pr-64">
+      <div className="flex-1">
         <Header />
         <main className="p-6">{children}</main>
       </div>
