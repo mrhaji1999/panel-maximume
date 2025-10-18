@@ -1,11 +1,10 @@
 import { Button } from '@/components/ui/button'
-import { useSidebar, useMobileMenu, useTheme, useUIStore } from '@/store/uiStore'
+import { useSidebar, useTheme, useUIStore } from '@/store/uiStore'
 import { useAuth } from '@/store/authStore'
 import { Menu, Sun, Moon, Bell } from 'lucide-react'
 
 export function Header() {
-  const { toggleSidebar } = useSidebar()
-  const { toggleMobileMenu } = useMobileMenu()
+  const { toggleSidebar, setSidebarOpen } = useSidebar()
   const theme = useTheme()
   const toggleTheme = useUIStore((state) => state.toggleTheme)
   const { user } = useAuth()
@@ -19,7 +18,7 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={toggleMobileMenu}
+            onClick={() => setSidebarOpen(true)}
             className="lg:hidden"
           >
             <Menu className="h-5 w-5" />

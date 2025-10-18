@@ -38,7 +38,7 @@ export const useUIStore = create<UIStore>()(
     (set, get) => ({
       // Initial state
       theme: 'light',
-      sidebarOpen: true,
+      sidebarOpen: false,
       mobileMenuOpen: false,
       loading: false,
       notifications: [],
