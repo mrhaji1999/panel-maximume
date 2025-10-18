@@ -121,7 +121,7 @@ export function Sidebar() {
   const location = useLocation()
   const { user } = useAuth()
   const { logout } = useAuthActions()
-  const { sidebarOpen, toggleSidebar } = useSidebar()
+  const { sidebarOpen, setSidebarOpen } = useSidebar()
 
   const userRole = user?.role
   const visibleNavigation =
@@ -137,17 +137,19 @@ export function Sidebar() {
     <>
       {/* Mobile backdrop */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
-          onClick={toggleSidebar}
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <div className={cn(
-        "fixed inset-y-0 right-0 z-50 w-64 bg-card border-l transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
-        sidebarOpen ? "translate-x-0" : "translate-x-full"
-      )}>
+      <div
+        className={cn(
+          'fixed inset-y-0 right-0 z-50 w-64 bg-card border-l transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0',
+          sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+        )}
+      >
         <div className="flex h-full flex-col">
           {/* Header */}
           <div className="flex h-16 items-center justify-between px-4 border-b">
@@ -155,7 +157,7 @@ export function Sidebar() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleSidebar}
+              onClick={() => setSidebarOpen(false)}
               className="lg:hidden"
             >
               <X className="h-5 w-5" />
@@ -198,7 +200,7 @@ export function Sidebar() {
                       )}
                       onClick={() => {
                         if (window.innerWidth < 1024) {
-                          toggleSidebar()
+                          setSidebarOpen(false)
                         }
                       }}
                     >
@@ -221,7 +223,7 @@ export function Sidebar() {
               className="w-full justify-start"
               onClick={() => {
                 logout()
-                toggleSidebar()
+                setSidebarOpen(false)
                 window.location.href = '/login'
               }}
             >
