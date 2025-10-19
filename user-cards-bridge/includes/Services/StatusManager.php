@@ -289,7 +289,7 @@ class StatusManager {
             'canceled' => ['normal', 'upsell'],
             'upsell' => ['upsell_pending', 'normal', 'canceled'],
             'normal' => ['upsell', 'canceled', 'no_answer'],
-            'upsell_pending' => ['upsell_paid', 'upsell', 'canceled'],
+            'upsell_pending' => ['upsell_paid', 'upsell', 'canceled', 'normal'],
             'upsell_paid' => ['normal', 'upsell'],
         ];
     }
@@ -338,9 +338,14 @@ class StatusManager {
                 ['status' => 400]
             );
         }
-        
+
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+
+        $sanitized_meta = $this->sanitize_meta($meta);
         $old_status = get_user_meta($customer_id, 'ucb_customer_status', true);
-        
+
         // Check if transition is allowed
         if ($old_status && !$this->can_transition($old_status, $new_status)) {
             return new \WP_Error(
@@ -349,69 +354,160 @@ class StatusManager {
                 ['status' => 400]
             );
         }
-        
+
         // Update status
         update_user_meta($customer_id, 'ucb_customer_status', $new_status);
-        
+
         // Log status change
-        $this->log_status_change($customer_id, $old_status, $new_status, $changed_by, $meta);
-        
+        $this->log_status_change($customer_id, $old_status, $new_status, $changed_by, $sanitized_meta);
+
         // Handle special status actions
-        $this->handle_status_actions($customer_id, $new_status, $meta);
-        
-        return true;
+        $details = $this->handle_status_actions($customer_id, $new_status, $sanitized_meta);
+
+        $response = [
+            'customer_id' => (int) $customer_id,
+            'old_status'  => $old_status ?: null,
+            'new_status'  => $new_status,
+        ];
+
+        if (!empty($sanitized_meta)) {
+            $response['meta'] = $sanitized_meta;
+        }
+
+        if (!empty($details)) {
+            $response['details'] = $details;
+        }
+
+        $status_config = $this->get_status($new_status);
+        if (is_array($status_config)) {
+            $response['status'] = array_merge(['slug' => $new_status], $status_config);
+        }
+
+        return $response;
     }
-    
+
+    private function sanitize_meta(array $meta): array {
+        $sanitized = [];
+
+        foreach ($meta as $key => $value) {
+            switch ($key) {
+                case 'reason':
+                    $sanitized[$key] = sanitize_textarea_field((string) $value);
+                    break;
+                case 'order_id':
+                    $sanitized[$key] = (int) $value;
+                    break;
+                case 'amount':
+                    $sanitized[$key] = (float) $value;
+                    break;
+                case 'pay_link':
+                    $sanitized[$key] = esc_url_raw((string) $value);
+                    break;
+                case 'field_key':
+                case 'field_label':
+                    $sanitized[$key] = sanitize_text_field((string) $value);
+                    break;
+                default:
+                    if (is_scalar($value)) {
+                        $sanitized[$key] = sanitize_text_field((string) $value);
+                    }
+                    break;
+            }
+        }
+
+        return $sanitized;
+    }
+
     /**
      * Log status change
      */
-    private function log_status_change($customer_id, $old_status, $new_status, $changed_by, $meta) {
+    private function log_status_change($customer_id, $old_status, $new_status, $changed_by, array $meta) {
+        $actor = $changed_by ?: get_current_user_id();
         $db = new \UCB\Database();
-        
+
         $db->log_status_change([
             'customer_id' => $customer_id,
-            'old_status' => $old_status,
-            'new_status' => $new_status,
-            'changed_by' => $changed_by ?: get_current_user_id(),
-            'reason' => $meta['reason'] ?? '',
-            'meta' => $meta
+            'old_status'  => $old_status,
+            'new_status'  => $new_status,
+            'changed_by'  => $actor,
+            'reason'      => $meta['reason'] ?? '',
         ]);
-        
+
         \UCB\Logger::log('info', 'Customer status changed', [
             'customer_id' => $customer_id,
-            'old_status' => $old_status,
-            'new_status' => $new_status,
-            'changed_by' => $changed_by ?: get_current_user_id(),
-            'meta' => $meta
-        ]);
+            'old_status'  => $old_status,
+            'new_status'  => $new_status,
+            'meta'        => $meta,
+        ], $actor);
     }
-    
+
     /**
      * Handle special status actions
      */
-    private function handle_status_actions($customer_id, $status, $meta) {
+    private function handle_status_actions($customer_id, $status, array $meta) {
         switch ($status) {
             case 'normal':
-                $this->handle_normal_status($customer_id, $meta);
-                break;
+                return $this->handle_normal_status($customer_id, $meta);
             case 'upsell_pending':
-                $this->handle_upsell_pending_status($customer_id, $meta);
-                break;
+                return $this->handle_upsell_pending_status($customer_id, $meta);
             case 'upsell_paid':
-                $this->handle_upsell_paid_status($customer_id, $meta);
-                break;
+                return $this->handle_upsell_paid_status($customer_id, $meta);
         }
+
+        return [];
     }
-    
+
     /**
      * Handle normal status - send random code
      */
-    private function handle_normal_status($customer_id, $meta) {
-        // Generate random code
-        $random_code = strtoupper(wp_generate_password(8, false, false));
+    private function handle_normal_status($customer_id, array $meta) {
+        $pending_order_id = (int) get_user_meta($customer_id, 'ucb_upsell_order_id', true);
+        $revoked_token = false;
+        $details = [];
 
-        // Store code in user meta
+        if ($pending_order_id > 0) {
+            $token_value = '';
+
+            if (function_exists('wc_get_order')) {
+                $order = wc_get_order($pending_order_id);
+
+                if ($order) {
+                    $token_value = (string) $order->get_meta('_ucb_payment_token');
+
+                    if (in_array($order->get_status(), ['pending', 'on-hold'], true)) {
+                        $order->update_status('cancelled', __('Cancelled after status reset', UCB_TEXT_DOMAIN));
+                        $details['cancelled_order_id'] = $pending_order_id;
+                    }
+                }
+            }
+
+            if ($token_value) {
+                $token_service = new PaymentTokenService();
+                $revoked_token = (bool) $token_service->revoke_token($token_value);
+                $details['revoked_token'] = $revoked_token;
+            }
+
+            delete_user_meta($customer_id, 'ucb_upsell_order_id');
+
+            $details['pending_order_id'] = $pending_order_id;
+        }
+
+        delete_user_meta($customer_id, 'ucb_upsell_field_key');
+        delete_user_meta($customer_id, 'ucb_upsell_field_label');
+        delete_user_meta($customer_id, 'ucb_upsell_amount');
+        delete_user_meta($customer_id, 'ucb_upsell_pay_link');
+
+        if ($pending_order_id > 0) {
+            \UCB\Logger::log('info', 'Upsell pending status reset to normal', [
+                'customer_id'   => $customer_id,
+                'order_id'      => $pending_order_id,
+                'token_revoked' => $revoked_token,
+            ]);
+        }
+
+        $random_code = strtoupper(wp_generate_password(8, false, false));
         update_user_meta($customer_id, 'ucb_customer_random_code', $random_code);
+        $details['normal_code'] = $random_code;
 
         $phone = get_user_meta($customer_id, 'phone', true);
         if (!$phone) {
@@ -420,49 +516,57 @@ class StatusManager {
 
         if ($phone) {
             update_user_meta($customer_id, 'ucb_customer_phone', $phone);
-
-            $sms = new \UCB\SMS\PayamakPanel();
-            $body_id = get_option('ucb_sms_normal_body_id', '');
-
-            if ($body_id) {
-                $sms->send($customer_id, $phone, $body_id, [$random_code], get_current_user_id());
-            }
+            $details['phone'] = $phone;
         }
+
+        return $details;
     }
-    
+
     /**
      * Handle upsell pending status
      */
-    private function handle_upsell_pending_status($customer_id, $meta) {
+    private function handle_upsell_pending_status($customer_id, array $meta) {
+        $details = [];
+
         // Store order information
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_order_id', $meta['order_id']);
+            $details['order_id'] = (int) $meta['order_id'];
         }
 
         if (isset($meta['field_key'])) {
             update_user_meta($customer_id, 'ucb_upsell_field_key', sanitize_text_field($meta['field_key']));
+            $details['field_key'] = sanitize_text_field($meta['field_key']);
         }
 
         if (isset($meta['field_label'])) {
             update_user_meta($customer_id, 'ucb_upsell_field_label', sanitize_text_field($meta['field_label']));
+            $details['field_label'] = sanitize_text_field($meta['field_label']);
         }
 
         if (isset($meta['amount'])) {
             update_user_meta($customer_id, 'ucb_upsell_amount', floatval($meta['amount']));
+            $details['amount'] = floatval($meta['amount']);
         }
 
         if (isset($meta['pay_link'])) {
             update_user_meta($customer_id, 'ucb_upsell_pay_link', esc_url_raw($meta['pay_link']));
+            $details['pay_link'] = esc_url_raw($meta['pay_link']);
         }
+
+        return $details;
     }
-    
+
     /**
      * Handle upsell paid status
      */
-    private function handle_upsell_paid_status($customer_id, $meta) {
+    private function handle_upsell_paid_status($customer_id, array $meta) {
+        $details = [];
+
         // Clear pending order info but keep audit trail
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_last_order_id', $meta['order_id']);
+            $details['order_id'] = (int) $meta['order_id'];
         }
 
         delete_user_meta($customer_id, 'ucb_upsell_order_id');
@@ -473,5 +577,14 @@ class StatusManager {
             'customer_id' => $customer_id,
             'order_id' => $meta['order_id'] ?? null
         ]);
+
+        if (!isset($details['order_id'])) {
+            $last_order = (int) get_user_meta($customer_id, 'ucb_upsell_last_order_id', true);
+            if ($last_order) {
+                $details['order_id'] = $last_order;
+            }
+        }
+
+        return $details;
     }
 }
