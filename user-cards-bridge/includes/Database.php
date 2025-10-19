@@ -2,7 +2,6 @@
 
 namespace UCB;
 
-use WP_Error;
 use wpdb;
 
 /**
@@ -380,9 +379,8 @@ class Database {
      * Insert status log.
      *
      * @param array<string, mixed> $data
-     * @return int|WP_Error Insert ID on success or WP_Error on failure.
      */
-    public function log_status_change(array $data) {
+    public function log_status_change(array $data): int {
         $defaults = [
             'customer_id' => 0,
             'old_status'  => null,
@@ -431,22 +429,18 @@ class Database {
             }
         }
 
-        $result = $this->db->insert(
+        $this->db->insert(
             $this->status_logs_table(),
             $payload,
-            $formats
+            [
+                '%d',
+                '%s',
+                '%s',
+                '%d',
+                '%s',
+                '%s',
+            ]
         );
-
-        if (false === $result) {
-            return new WP_Error(
-                'ucb_status_log_failed',
-                __('Failed to log status change.', 'user-cards-bridge'),
-                [
-                    'db_error' => $this->db->last_error,
-                    'payload'  => $payload,
-                ]
-            );
-        }
 
         return (int) $this->db->insert_id;
     }

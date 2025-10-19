@@ -148,13 +148,7 @@ class Customers extends BaseController {
     public function update_status(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
         $status = sanitize_key($request->get_param('status'));
-        $meta_param = $request->get_param('meta');
-        $meta = is_array($meta_param) ? $meta_param : [];
-        $reason = $request->get_param('reason');
-
-        if (null !== $reason && '' !== $reason) {
-            $meta['reason'] = sanitize_textarea_field($reason);
-        }
+        $meta = (array) $request->get_param('meta');
 
         if (!Security::can_manage_customer($customer_id)) {
             return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
@@ -256,8 +250,8 @@ class Customers extends BaseController {
         return $this->success($result);
     }
 
-    protected function send_normal_code_internal(int $customer_id, ?string $code = null) {
-        return $this->notifications->send_normal_code($customer_id, $code);
+    protected function send_normal_code_internal(int $customer_id) {
+        return $this->notifications->send_normal_code($customer_id);
     }
 
     public function require_access(WP_REST_Request $request): bool {
