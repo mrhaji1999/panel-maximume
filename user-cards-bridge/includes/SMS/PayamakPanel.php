@@ -56,10 +56,8 @@ class PayamakPanel {
             ]);
 
             $response = $client->SendByBaseNumber($payload);
-            $result = [
-                'result' => isset($response->SendByBaseNumberResult) ? (string) $response->SendByBaseNumberResult : '',
-                'payload' => $payload,
-            ];
+            $raw_result = isset($response->SendByBaseNumberResult) ? (string) $response->SendByBaseNumberResult : '';
+            $result = $this->interpret_gateway_result($raw_result, $payload);
         } catch (SoapFault $fault) {
             $result = new WP_Error('ucb_sms_fault', $fault->getMessage(), ['code' => $fault->faultcode]);
         } catch (\Exception $exception) {
@@ -71,15 +69,80 @@ class PayamakPanel {
             'phone'         => $phone,
             'message'       => wp_json_encode($variables),
             'body_id'       => $body_id,
-            'result_code'   => is_wp_error($result) ? 'error' : $result['result'],
-            'result_message'=> is_wp_error($result) ? $result->get_error_message() : __('Success', 'user-cards-bridge'),
-            'rec_id'        => !is_wp_error($result) ? $result['result'] : null,
+            'result_code'   => null,
+            'result_message'=> null,
+            'rec_id'        => null,
             'sent_by'       => $sent_by ?: get_current_user_id(),
         ];
+
+        if (is_wp_error($result)) {
+            $data = $result->get_error_data();
+            $log_payload['result_code'] = isset($data['result']) ? (string) $data['result'] : 'error';
+            $log_payload['result_message'] = $result->get_error_message();
+        } else {
+            $log_payload['result_code'] = $result['result'];
+            $log_payload['result_message'] = __('Success', 'user-cards-bridge');
+            $log_payload['rec_id'] = $result['rec_id'];
+        }
 
         $this->logger->sms($log_payload);
 
         return $result;
+    }
+
+    /**
+     * Interpret the raw gateway response and normalise it.
+     *
+     * @param string               $raw_result
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>|WP_Error
+     */
+    protected function interpret_gateway_result(string $raw_result, array $payload) {
+        $trimmed = trim($raw_result);
+
+        if ($trimmed === '') {
+            return new WP_Error('ucb_sms_empty_response', __('Empty response from SMS gateway.', 'user-cards-bridge'));
+        }
+
+        $success_threshold = 10;
+        if (ctype_digit($trimmed) && strlen($trimmed) >= $success_threshold) {
+            return [
+                'result'  => $trimmed,
+                'rec_id'  => $trimmed,
+                'payload' => $payload,
+            ];
+        }
+
+        $messages = [
+            '-10' => __('Message variables contain a URL.', 'user-cards-bridge'),
+            '-7'  => __('Sender number is invalid. Please contact support.', 'user-cards-bridge'),
+            '-6'  => __('Internal gateway error. Please contact support.', 'user-cards-bridge'),
+            '-5'  => __('Message text does not match the approved template.', 'user-cards-bridge'),
+            '-4'  => __('Provided bodyId is invalid or not approved.', 'user-cards-bridge'),
+            '-3'  => __('Sender line is not defined. Please contact support.', 'user-cards-bridge'),
+            '-2'  => __('Only a single recipient is allowed for this message.', 'user-cards-bridge'),
+            '-1'  => __('Access to this web service is disabled.', 'user-cards-bridge'),
+            '0'   => __('Invalid username or password.', 'user-cards-bridge'),
+            '2'   => __('Insufficient SMS credit.', 'user-cards-bridge'),
+            '6'   => __('SMS gateway is currently updating. Please try again later.', 'user-cards-bridge'),
+            '7'   => __('Message contains a filtered keyword. Contact support.', 'user-cards-bridge'),
+            '10'  => __('The requested user account is inactive.', 'user-cards-bridge'),
+            '11'  => __('Message was not sent.', 'user-cards-bridge'),
+            '12'  => __('User documentation is incomplete.', 'user-cards-bridge'),
+            '16'  => __('Recipient number not found.', 'user-cards-bridge'),
+            '17'  => __('Message text cannot be empty.', 'user-cards-bridge'),
+            '18'  => __('Recipient number is invalid.', 'user-cards-bridge'),
+        ];
+
+        if (isset($messages[$trimmed])) {
+            return new WP_Error('ucb_sms_gateway_error', $messages[$trimmed], ['result' => $trimmed]);
+        }
+
+        return new WP_Error(
+            'ucb_sms_gateway_error',
+            sprintf(__('Unexpected gateway response: %s', 'user-cards-bridge'), $trimmed),
+            ['result' => $trimmed]
+        );
     }
 
     /**
@@ -98,7 +161,57 @@ class PayamakPanel {
             $link,
         ];
 
-        return $this->send($customer_id, $phone, $body_id, $variables);
+        $result = $this->send($customer_id, $phone, $body_id, $variables);
+
+        if (is_wp_error($result) && 'ucb_sms_gateway_error' === $result->get_error_code()) {
+            $data = $result->get_error_data();
+            $gateway_code = isset($data['result']) ? (string) $data['result'] : '';
+
+            if ('-10' === $gateway_code) {
+                $masked_link = $this->mask_upsell_link($link);
+
+                if ($masked_link && $masked_link !== $variables[2]) {
+                    \UCB\Logger::log('warning', 'SMS gateway rejected upsell link. Retrying with sanitised variant.', [
+                        'customer_id' => $customer_id,
+                        'phone'       => $phone,
+                        'body_id'     => $body_id,
+                        'original'    => $variables[2],
+                        'masked'      => $masked_link,
+                    ]);
+
+                    $variables[2] = $masked_link;
+                    $result = $this->send($customer_id, $phone, $body_id, $variables);
+
+                    if (!is_wp_error($result)) {
+                        $result['link_sanitized'] = true;
+                        $result['used_link'] = $masked_link;
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Create a gateway-friendly representation of the upsell payment link.
+     */
+    protected function mask_upsell_link(string $link): ?string {
+        $sanitised = preg_replace('~^https?://~i', '', $link);
+
+        if (is_string($sanitised)) {
+            $sanitised = preg_replace('~^www\.~i', '', $sanitised);
+        }
+
+        if (!is_string($sanitised) || '' === trim((string) $sanitised)) {
+            return null;
+        }
+
+        if ($sanitised === $link) {
+            return null;
+        }
+
+        return $sanitised;
     }
 
     /**

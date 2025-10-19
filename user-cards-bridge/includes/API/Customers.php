@@ -148,7 +148,13 @@ class Customers extends BaseController {
     public function update_status(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
         $status = sanitize_key($request->get_param('status'));
-        $meta = (array) $request->get_param('meta');
+        $meta_param = $request->get_param('meta');
+        $meta = is_array($meta_param) ? $meta_param : [];
+        $reason = $request->get_param('reason');
+
+        if (null !== $reason && '' !== $reason) {
+            $meta['reason'] = sanitize_textarea_field($reason);
+        }
 
         if (!Security::can_manage_customer($customer_id)) {
             return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
@@ -160,8 +166,18 @@ class Customers extends BaseController {
             return $this->from_wp_error($result);
         }
 
+        if (!is_array($result)) {
+            $result = [
+                'customer_id' => $customer_id,
+                'old_status'  => null,
+                'new_status'  => $status,
+            ];
+        }
+
         if ('normal' === $status) {
-            $send_result = $this->send_normal_code_internal($customer_id);
+            $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : [];
+            $code = isset($details['normal_code']) ? (string) $details['normal_code'] : null;
+            $send_result = $this->send_normal_code_internal($customer_id, $code);
             if (is_wp_error($send_result)) {
                 return $this->from_wp_error($send_result);
             }
@@ -243,8 +259,8 @@ class Customers extends BaseController {
         return $this->success($result);
     }
 
-    protected function send_normal_code_internal(int $customer_id) {
-        return $this->notifications->send_normal_code($customer_id);
+    protected function send_normal_code_internal(int $customer_id, ?string $code = null) {
+        return $this->notifications->send_normal_code($customer_id, $code);
     }
 
     public function require_access(WP_REST_Request $request): bool {
