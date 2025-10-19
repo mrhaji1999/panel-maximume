@@ -160,31 +160,37 @@ class Customers extends BaseController {
             return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
         }
 
-        $result = $this->statuses->change_status($customer_id, $status, get_current_user_id(), $meta);
+        $change_result = $this->statuses->change_status($customer_id, $status, get_current_user_id(), $meta);
 
-        if (is_wp_error($result)) {
-            return $this->from_wp_error($result);
+        if (is_wp_error($change_result)) {
+            return $this->from_wp_error($change_result);
         }
 
-        if (!is_array($result)) {
-            $result = [
+        $response = [
+            'changed' => (bool) $change_result,
+        ];
+
+        if (is_array($change_result)) {
+            $response = array_merge($change_result, $response);
+        } else {
+            $response = array_merge($response, [
                 'customer_id' => $customer_id,
                 'old_status'  => null,
                 'new_status'  => $status,
-            ];
+            ]);
         }
 
-        if ('normal' === $status) {
-            $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : [];
+        if ('normal' === $status && !empty($response['changed'])) {
+            $details = isset($response['details']) && is_array($response['details']) ? $response['details'] : [];
             $code = isset($details['normal_code']) ? (string) $details['normal_code'] : null;
             $send_result = $this->send_normal_code_internal($customer_id, $code);
             if (is_wp_error($send_result)) {
                 return $this->from_wp_error($send_result);
             }
-            $result['normal_sms'] = $send_result;
+            $response['normal_sms'] = $send_result;
         }
 
-        return $this->success($result);
+        return $this->success($response);
     }
 
     public function add_note(WP_REST_Request $request) {
