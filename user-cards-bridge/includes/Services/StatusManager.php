@@ -425,13 +425,24 @@ class StatusManager {
         $actor = $changed_by ?: get_current_user_id();
         $db = new \UCB\Database();
 
-        $db->log_status_change([
+        $insert_id = $db->log_status_change([
             'customer_id' => $customer_id,
             'old_status'  => $old_status,
             'new_status'  => $new_status,
             'changed_by'  => $actor,
             'reason'      => $meta['reason'] ?? '',
         ]);
+
+        if (is_wp_error($insert_id)) {
+            $error_data = $insert_id->get_error_data();
+            \UCB\Logger::log('error', 'Failed to store status change log', [
+                'customer_id' => $customer_id,
+                'old_status'  => $old_status,
+                'new_status'  => $new_status,
+                'error'       => $insert_id->get_error_message(),
+                'db_error'    => is_array($error_data) ? ($error_data['db_error'] ?? null) : null,
+            ], $actor);
+        }
 
         \UCB\Logger::log('info', 'Customer status changed', [
             'customer_id' => $customer_id,
