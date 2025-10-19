@@ -71,7 +71,6 @@ class Activator {
             new_status varchar(50) NOT NULL,
             changed_by bigint(20) NOT NULL,
             reason text,
-            meta longtext,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY customer_id (customer_id),
