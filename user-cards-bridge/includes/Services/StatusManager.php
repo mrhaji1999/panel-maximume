@@ -471,10 +471,9 @@ class StatusManager {
     /**
      * Handle normal status - send random code
      */
-    private function handle_normal_status($customer_id, array $meta) {
+    private function handle_normal_status($customer_id, $meta) {
         $pending_order_id = (int) get_user_meta($customer_id, 'ucb_upsell_order_id', true);
         $revoked_token = false;
-        $details = [];
 
         if ($pending_order_id > 0) {
             $token_value = '';
@@ -487,7 +486,6 @@ class StatusManager {
 
                     if (in_array($order->get_status(), ['pending', 'on-hold'], true)) {
                         $order->update_status('cancelled', __('Cancelled after status reset', UCB_TEXT_DOMAIN));
-                        $details['cancelled_order_id'] = $pending_order_id;
                     }
                 }
             }
@@ -495,18 +493,26 @@ class StatusManager {
             if ($token_value) {
                 $token_service = new PaymentTokenService();
                 $revoked_token = (bool) $token_service->revoke_token($token_value);
-                $details['revoked_token'] = $revoked_token;
             }
 
             delete_user_meta($customer_id, 'ucb_upsell_order_id');
-
-            $details['pending_order_id'] = $pending_order_id;
         }
 
         delete_user_meta($customer_id, 'ucb_upsell_field_key');
         delete_user_meta($customer_id, 'ucb_upsell_field_label');
         delete_user_meta($customer_id, 'ucb_upsell_amount');
         delete_user_meta($customer_id, 'ucb_upsell_pay_link');
+
+        if ($pending_order_id > 0) {
+            \UCB\Logger::log('info', 'Upsell pending status reset to normal', [
+                'customer_id' => $customer_id,
+                'order_id' => $pending_order_id,
+                'token_revoked' => $revoked_token,
+            ]);
+        }
+
+        // Generate random code
+        $random_code = strtoupper(wp_generate_password(8, false, false));
 
         if ($pending_order_id > 0) {
             \UCB\Logger::log('info', 'Upsell pending status reset to normal', [
