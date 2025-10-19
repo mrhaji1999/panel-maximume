@@ -390,6 +390,7 @@ class Database {
             'changed_by'  => 0,
             'reason'      => null,
             'created_at'  => current_time('mysql'),
+            'meta'        => null,
         ];
 
         $parsed = wp_parse_args($data, $defaults);
@@ -401,6 +402,7 @@ class Database {
             'changed_by'  => '%d',
             'reason'      => '%s',
             'created_at'  => '%s',
+            'meta'        => '%s',
         ];
 
         $payload = [];
@@ -412,6 +414,16 @@ class Database {
 
                 if ('reason' === $column && ('' === $value || null === $value)) {
                     $value = null;
+                }
+
+                if ('meta' === $column) {
+                    if (is_array($value) || is_object($value)) {
+                        $value = wp_json_encode($value);
+                    }
+
+                    if ('' === $value) {
+                        $value = null;
+                    }
                 }
 
                 $payload[$column] = $value;
