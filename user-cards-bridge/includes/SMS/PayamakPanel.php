@@ -161,7 +161,57 @@ class PayamakPanel {
             $link,
         ];
 
-        return $this->send($customer_id, $phone, $body_id, $variables);
+        $result = $this->send($customer_id, $phone, $body_id, $variables);
+
+        if (is_wp_error($result) && 'ucb_sms_gateway_error' === $result->get_error_code()) {
+            $data = $result->get_error_data();
+            $gateway_code = isset($data['result']) ? (string) $data['result'] : '';
+
+            if ('-10' === $gateway_code) {
+                $masked_link = $this->mask_upsell_link($link);
+
+                if ($masked_link && $masked_link !== $variables[2]) {
+                    \UCB\Logger::log('warning', 'SMS gateway rejected upsell link. Retrying with sanitised variant.', [
+                        'customer_id' => $customer_id,
+                        'phone'       => $phone,
+                        'body_id'     => $body_id,
+                        'original'    => $variables[2],
+                        'masked'      => $masked_link,
+                    ]);
+
+                    $variables[2] = $masked_link;
+                    $result = $this->send($customer_id, $phone, $body_id, $variables);
+
+                    if (!is_wp_error($result)) {
+                        $result['link_sanitized'] = true;
+                        $result['used_link'] = $masked_link;
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Create a gateway-friendly representation of the upsell payment link.
+     */
+    protected function mask_upsell_link(string $link): ?string {
+        $sanitised = preg_replace('~^https?://~i', '', $link);
+
+        if (is_string($sanitised)) {
+            $sanitised = preg_replace('~^www\.~i', '', $sanitised);
+        }
+
+        if (!is_string($sanitised) || '' === trim((string) $sanitised)) {
+            return null;
+        }
+
+        if ($sanitised === $link) {
+            return null;
+        }
+
+        return $sanitised;
     }
 
     /**

@@ -24,6 +24,7 @@ import {
   CustomerListResponse,
   CustomerStatus,
   CustomerTabsResponse,
+  UpsellSmsResult,
 } from '@/types'
 import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
 import {
@@ -319,7 +320,7 @@ export function CustomerManagementView({
   })
 
   const initUpsellMutation = useMutation<
-    { pay_link?: string },
+    { pay_link?: string; sms_result?: UpsellSmsResult | undefined },
     unknown,
     { customerId: number; cardId: number; fieldKey: string }
   >({
@@ -331,7 +332,19 @@ export function CustomerManagementView({
       return response.data
     },
     onSuccess: (data) => {
-      notifySuccess('سفارش ایجاد شد', 'لینک پرداخت ایجاد و پیامک ارسال شد')
+      const smsResult = data?.sms_result
+      const successMessage = smsResult
+        ? smsResult.link_sanitized
+          ? 'پیامک ارسال شد (لینک بدون پیشوند https) و لینک پرداخت ایجاد شد'
+          : 'لینک پرداخت ایجاد و پیامک ارسال شد'
+        : 'لینک پرداخت ایجاد شد'
+
+      notifySuccess('سفارش ایجاد شد', successMessage)
+
+      if (smsResult?.link_sanitized && smsResult.used_link) {
+        notifyInfo('لینک ارسال‌شده در پیامک', smsResult.used_link)
+      }
+
       if (data?.pay_link) {
         notifyInfo('لینک پرداخت', data.pay_link)
       }
