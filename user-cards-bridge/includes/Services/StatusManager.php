@@ -289,7 +289,7 @@ class StatusManager {
             'canceled' => ['normal', 'upsell'],
             'upsell' => ['upsell_pending', 'normal', 'canceled'],
             'normal' => ['upsell', 'canceled', 'no_answer'],
-            'upsell_pending' => ['upsell_paid', 'upsell', 'canceled'],
+            'upsell_pending' => ['upsell_paid', 'upsell', 'canceled', 'normal'],
             'upsell_paid' => ['normal', 'upsell'],
         ];
     }
@@ -407,6 +407,45 @@ class StatusManager {
      * Handle normal status - send random code
      */
     private function handle_normal_status($customer_id, $meta) {
+        $pending_order_id = (int) get_user_meta($customer_id, 'ucb_upsell_order_id', true);
+        $revoked_token = false;
+
+        if ($pending_order_id > 0) {
+            $token_value = '';
+
+            if (function_exists('wc_get_order')) {
+                $order = wc_get_order($pending_order_id);
+
+                if ($order) {
+                    $token_value = (string) $order->get_meta('_ucb_payment_token');
+
+                    if (in_array($order->get_status(), ['pending', 'on-hold'], true)) {
+                        $order->update_status('cancelled', __('Cancelled after status reset', UCB_TEXT_DOMAIN));
+                    }
+                }
+            }
+
+            if ($token_value) {
+                $token_service = new PaymentTokenService();
+                $revoked_token = (bool) $token_service->revoke_token($token_value);
+            }
+
+            delete_user_meta($customer_id, 'ucb_upsell_order_id');
+        }
+
+        delete_user_meta($customer_id, 'ucb_upsell_field_key');
+        delete_user_meta($customer_id, 'ucb_upsell_field_label');
+        delete_user_meta($customer_id, 'ucb_upsell_amount');
+        delete_user_meta($customer_id, 'ucb_upsell_pay_link');
+
+        if ($pending_order_id > 0) {
+            \UCB\Logger::log('info', 'Upsell pending status reset to normal', [
+                'customer_id' => $customer_id,
+                'order_id' => $pending_order_id,
+                'token_revoked' => $revoked_token,
+            ]);
+        }
+
         // Generate random code
         $random_code = strtoupper(wp_generate_password(8, false, false));
 
