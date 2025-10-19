@@ -154,21 +154,28 @@ class Customers extends BaseController {
             return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
         }
 
-        $result = $this->statuses->change_status($customer_id, $status, get_current_user_id(), $meta);
+        $change_result = $this->statuses->change_status($customer_id, $status, get_current_user_id(), $meta);
 
-        if (is_wp_error($result)) {
-            return $this->from_wp_error($result);
+        if (is_wp_error($change_result)) {
+            return $this->from_wp_error($change_result);
         }
 
-        if ('normal' === $status) {
+        $response = [
+            'changed' => (bool) $change_result,
+            'status'  => $status,
+        ];
+
+        if ('normal' === $status && $response['changed']) {
             $send_result = $this->send_normal_code_internal($customer_id);
+
             if (is_wp_error($send_result)) {
                 return $this->from_wp_error($send_result);
             }
-            $result['normal_sms'] = $send_result;
+
+            $response['normal_sms'] = $send_result;
         }
 
-        return $this->success($result);
+        return $this->success($response);
     }
 
     public function add_note(WP_REST_Request $request) {
