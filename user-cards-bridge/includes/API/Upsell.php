@@ -6,6 +6,7 @@ use UCB\Plugin;
 use UCB\Security;
 use UCB\Services\CardService;
 use UCB\Services\CustomerService;
+use UCB\Services\NotificationService;
 use UCB\Services\StatusManager;
 use UCB\SMS\PayamakPanel;
 use UCB\WooCommerce\Integration;
@@ -18,6 +19,7 @@ class Upsell extends BaseController {
     protected PayamakPanel $sms;
     protected Integration $woocommerce;
     protected StatusManager $statuses;
+    protected NotificationService $notifications;
 
     public function __construct() {
         $this->cards = new CardService();
@@ -25,6 +27,7 @@ class Upsell extends BaseController {
         $this->sms = new PayamakPanel();
         $this->woocommerce = Plugin::get_instance()->get_woocommerce_integration();
         $this->statuses = new StatusManager();
+        $this->notifications = new NotificationService();
         parent::__construct();
     }
 
@@ -118,18 +121,26 @@ class Upsell extends BaseController {
         
         // Change status to normal (this will trigger code generation and SMS)
         $result = $this->statuses->change_status($customer_id, 'normal', get_current_user_id());
-        
+
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);
         }
-        
-        // Get the generated code
-        $random_code = get_user_meta($customer_id, 'ucb_customer_random_code', true);
-        
+
+        $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : [];
+        $code = isset($details['normal_code']) ? (string) $details['normal_code'] : null;
+
+        $send_result = $this->notifications->send_normal_code($customer_id, $code);
+
+        if (is_wp_error($send_result)) {
+            return $this->from_wp_error($send_result);
+        }
+
         return $this->success([
             'message' => __('Random code sent to customer.', 'user-cards-bridge'),
-            'code' => $random_code,
-            'status' => 'normal'
+            'code' => $send_result['code'],
+            'status' => 'normal',
+            'sms_result' => $send_result['sms_result'],
+            'status_update' => $result,
         ]);
     }
 
