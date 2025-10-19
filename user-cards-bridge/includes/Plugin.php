@@ -62,6 +62,7 @@ class Plugin {
         new Database();
         new Security();
         new Logger();
+        new AjaxHandlers();
         new SMS\PayamakPanel();
         new Services\FormSyncService();
         
@@ -149,7 +150,20 @@ class Plugin {
             'nonce' => wp_create_nonce('ucb_admin_nonce'),
             'apiUrl' => rest_url('user-cards-bridge/v1/'),
             'strings' => [
+                'remove' => __('Remove', UCB_TEXT_DOMAIN),
                 'confirmDelete' => __('Are you sure you want to delete this item?', UCB_TEXT_DOMAIN),
+                'deleteError' => __('Failed to delete item: ', UCB_TEXT_DOMAIN),
+                'confirmTestSMS' => __('Do you want to send a test SMS?', UCB_TEXT_DOMAIN),
+                'testSMSSuccess' => __('Test SMS sent successfully.', UCB_TEXT_DOMAIN),
+                'testSMSError' => __('Failed to send test SMS: ', UCB_TEXT_DOMAIN),
+                'testing' => __('Testing...', UCB_TEXT_DOMAIN),
+                'testSMS' => __('Test SMS Configuration', UCB_TEXT_DOMAIN),
+                'confirmCleanup' => __('This will delete old log entries. Continue?', UCB_TEXT_DOMAIN),
+                'cleaning' => __('Cleaning up...', UCB_TEXT_DOMAIN),
+                'cleanupSuccess' => __('Logs cleaned up successfully!', UCB_TEXT_DOMAIN),
+                'cleanupError' => __('Log cleanup failed: ', UCB_TEXT_DOMAIN),
+                'cleanupLogs' => __('Cleanup Old Logs', UCB_TEXT_DOMAIN),
+                'settingsSaved' => __('Settings saved successfully.', UCB_TEXT_DOMAIN),
                 'error' => __('An error occurred. Please try again.', UCB_TEXT_DOMAIN),
                 'success' => __('Operation completed successfully.', UCB_TEXT_DOMAIN),
             ]
