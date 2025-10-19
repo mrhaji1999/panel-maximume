@@ -1025,18 +1025,49 @@
                 "format": "uri",
                 "description": "Payment link"
               },
+              "token": {
+                "type": "string",
+                "description": "Temporary payment token"
+              },
+              "expires_at": {
+                "type": "string",
+                "description": "Token expiration in UTC (Y-m-d H:i:s)"
+              },
               "amount": {
                 "type": "number",
-                "format": "float",
                 "description": "Order amount"
               },
-              "field_title": {
+              "field_label": {
                 "type": "string",
-                "description": "Selected field title"
+                "description": "Selected field label"
               },
               "sms_result": {
                 "type": "object",
                 "description": "SMS sending result"
+              },
+              "sms_error": {
+                "type": "object",
+                "description": "Details when SMS delivery fails",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "description": "Gateway metadata or result code",
+                    "oneOf": [
+                      { "type": "object" },
+                      { "type": "string" },
+                      { "type": "null" }
+                    ]
+                  }
+                }
+              },
+              "status_update": {
+                "type": "object",
+                "description": "Customer status transition details"
               }
             }
           },

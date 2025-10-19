@@ -213,12 +213,34 @@ export interface UpsellInitRequest {
   field_key: string
 }
 
+export interface UpsellSmsResult {
+  result?: string
+  rec_id?: string
+  payload?: {
+    text?: string[]
+    [key: string]: unknown
+  }
+  link_sanitized?: boolean
+  used_link?: string
+  [key: string]: unknown
+}
+
+export interface UpsellSmsError {
+  code: string
+  message: string
+  data?: unknown
+}
+
 export interface UpsellResponse {
   order_id: number
   pay_link: string
-  amount: number
-  field_title: string
-  sms_result: any
+  token?: string
+  expires_at?: string
+  amount?: number
+  field_label?: string
+  sms_result?: UpsellSmsResult
+  sms_error?: UpsellSmsError | null
+  status_update?: Record<string, unknown>
 }
 
 // SMS types

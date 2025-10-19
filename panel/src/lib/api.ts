@@ -23,6 +23,7 @@ import {
   ScheduleResponse,
   AvailabilityResponse,
   DashboardSummary,
+  UpsellResponse,
 } from '@/types'
 
 // API Configuration
@@ -269,7 +270,7 @@ export const customersApi = {
     apiClient.post(`/customers/${id}/normal/send-code`),
   
   initUpsell: (id: number, cardId: number, fieldKey: string) =>
-    apiClient.post(`/customers/${id}/upsell/init`, { card_id: cardId, field_key: fieldKey }),
+    apiClient.post<UpsellResponse>(`/customers/${id}/upsell/init`, { card_id: cardId, field_key: fieldKey }),
 }
 
 // Cards API

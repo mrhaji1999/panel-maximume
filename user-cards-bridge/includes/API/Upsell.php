@@ -3,9 +3,11 @@
 namespace UCB\API;
 
 use UCB\Plugin;
+use UCB\Logger;
 use UCB\Security;
 use UCB\Services\CardService;
 use UCB\Services\CustomerService;
+use UCB\Services\NotificationService;
 use UCB\Services\StatusManager;
 use UCB\SMS\PayamakPanel;
 use UCB\WooCommerce\Integration;
@@ -18,6 +20,7 @@ class Upsell extends BaseController {
     protected PayamakPanel $sms;
     protected Integration $woocommerce;
     protected StatusManager $statuses;
+    protected NotificationService $notifications;
 
     public function __construct() {
         $this->cards = new CardService();
@@ -25,6 +28,7 @@ class Upsell extends BaseController {
         $this->sms = new PayamakPanel();
         $this->woocommerce = Plugin::get_instance()->get_woocommerce_integration();
         $this->statuses = new StatusManager();
+        $this->notifications = new NotificationService();
         parent::__construct();
     }
 
@@ -87,8 +91,29 @@ class Upsell extends BaseController {
 
         $formatted_amount = function_exists('wc_price') ? wc_price($selected['amount']) : number_format((float) $selected['amount'], 2, '.', ',');
         $sms_result = $this->sms->send_upsell($customer_id, $phone, $order['pay_link'], $selected['label'], $formatted_amount);
+        $sms_error = null;
+
         if (is_wp_error($sms_result)) {
-            return $this->from_wp_error($sms_result);
+            $sms_error = [
+                'code'    => $sms_result->get_error_code(),
+                'message' => $sms_result->get_error_message(),
+            ];
+
+            $error_data = $sms_result->get_error_data();
+            if (null !== $error_data) {
+                $sms_error['data'] = $error_data;
+            }
+
+            Logger::log('error', 'Failed to send upsell SMS', [
+                'customer_id'    => $customer_id,
+                'phone'          => $phone,
+                'order_id'       => $order['order_id'],
+                'error_code'     => $sms_error['code'],
+                'error_message'  => $sms_error['message'],
+                'gateway_result' => is_array($error_data) ? ($error_data['result'] ?? null) : $error_data,
+            ], get_current_user_id());
+
+            $sms_result = null;
         }
 
         update_user_meta($customer_id, 'ucb_upsell_field_key', $selected['key']);
@@ -96,7 +121,7 @@ class Upsell extends BaseController {
         update_user_meta($customer_id, 'ucb_upsell_amount', (float) $selected['amount']);
         update_user_meta($customer_id, 'ucb_upsell_pay_link', $order['pay_link']);
 
-        $this->statuses->change_status($customer_id, 'upsell_pending', get_current_user_id(), [
+        $status_update = $this->statuses->change_status($customer_id, 'upsell_pending', get_current_user_id(), [
             'order_id'   => $order['order_id'],
             'field_key'  => $selected['key'],
             'field_label'=> $selected['label'],
@@ -104,13 +129,29 @@ class Upsell extends BaseController {
             'pay_link'   => $order['pay_link'],
         ]);
 
-        return $this->success([
-            'order_id'  => $order['order_id'],
-            'pay_link'  => $order['pay_link'],
-            'sms_result'=> $sms_result,
-            'token'     => $order['token'],
-            'expires_at'=> $order['expires_at'],
-        ]);
+        if (is_wp_error($status_update)) {
+            return $this->from_wp_error($status_update);
+        }
+
+        $response = [
+            'order_id'      => $order['order_id'],
+            'pay_link'      => $order['pay_link'],
+            'token'         => $order['token'],
+            'expires_at'    => $order['expires_at'],
+            'amount'        => (float) $selected['amount'],
+            'field_label'   => $selected['label'],
+            'status_update' => $status_update,
+        ];
+
+        if ($sms_result !== null) {
+            $response['sms_result'] = $sms_result;
+        }
+
+        if ($sms_error !== null) {
+            $response['sms_error'] = $sms_error;
+        }
+
+        return $this->success($response);
     }
 
     public function send_normal_code(WP_REST_Request $request) {
@@ -118,18 +159,26 @@ class Upsell extends BaseController {
         
         // Change status to normal (this will trigger code generation and SMS)
         $result = $this->statuses->change_status($customer_id, 'normal', get_current_user_id());
-        
+
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);
         }
-        
-        // Get the generated code
-        $random_code = get_user_meta($customer_id, 'ucb_customer_random_code', true);
-        
+
+        $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : [];
+        $code = isset($details['normal_code']) ? (string) $details['normal_code'] : null;
+
+        $send_result = $this->notifications->send_normal_code($customer_id, $code);
+
+        if (is_wp_error($send_result)) {
+            return $this->from_wp_error($send_result);
+        }
+
         return $this->success([
             'message' => __('Random code sent to customer.', 'user-cards-bridge'),
-            'code' => $random_code,
-            'status' => 'normal'
+            'code' => $send_result['code'],
+            'status' => 'normal',
+            'sms_result' => $send_result['sms_result'],
+            'status_update' => $result,
         ]);
     }
 

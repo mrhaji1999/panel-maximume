@@ -20,8 +20,8 @@ class NotificationService {
      *
      * @return array<string, mixed>|WP_Error
      */
-    public function send_normal_code(int $customer_id) {
-        $code = strtoupper(wp_generate_password(8, false, false));
+    public function send_normal_code(int $customer_id, ?string $code = null) {
+        $code = $code ? strtoupper($code) : strtoupper(wp_generate_password(8, false, false));
         update_user_meta($customer_id, 'ucb_customer_random_code', $code);
 
         $phone = get_user_meta($customer_id, 'phone', true);

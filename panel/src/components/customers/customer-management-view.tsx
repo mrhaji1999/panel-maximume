@@ -24,6 +24,8 @@ import {
   CustomerListResponse,
   CustomerStatus,
   CustomerTabsResponse,
+  UpsellResponse,
+  UpsellSmsResult,
 } from '@/types'
 import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
 import {
@@ -319,7 +321,7 @@ export function CustomerManagementView({
   })
 
   const initUpsellMutation = useMutation<
-    { pay_link?: string },
+    UpsellResponse,
     unknown,
     { customerId: number; cardId: number; fieldKey: string }
   >({
@@ -331,7 +333,38 @@ export function CustomerManagementView({
       return response.data
     },
     onSuccess: (data) => {
-      notifySuccess('سفارش ایجاد شد', 'لینک پرداخت ایجاد و پیامک ارسال شد')
+      const smsResult = data?.sms_result
+      const smsError = data?.sms_error || null
+
+      let successMessage = 'لینک پرداخت ایجاد شد'
+
+      if (smsResult) {
+        successMessage = smsResult.link_sanitized
+          ? 'پیامک ارسال شد (لینک بدون پیشوند https) و لینک پرداخت ایجاد شد'
+          : 'لینک پرداخت ایجاد و پیامک ارسال شد'
+      } else if (smsError) {
+        successMessage = 'لینک پرداخت ایجاد شد اما ارسال پیامک ناموفق بود'
+      }
+
+      notifySuccess('سفارش ایجاد شد', successMessage)
+
+      if (smsResult?.link_sanitized && smsResult.used_link) {
+        notifyInfo('لینک ارسال‌شده در پیامک', smsResult.used_link)
+      }
+
+      if (smsError) {
+        const errorMessage = smsError.message || 'ارسال پیامک ناموفق بود'
+        notifyError('ارسال پیامک ناموفق بود', errorMessage)
+
+        if (smsError.data && typeof smsError.data === 'object') {
+          const smsErrorRecord = smsError.data as Record<string, unknown>
+          const gatewayResult = typeof smsErrorRecord.result === 'string' ? smsErrorRecord.result : undefined
+          if (gatewayResult) {
+            notifyInfo('کد خطای پیامک', `کد بازگشتی درگاه: ${gatewayResult}`)
+          }
+        }
+      }
+
       if (data?.pay_link) {
         notifyInfo('لینک پرداخت', data.pay_link)
       }

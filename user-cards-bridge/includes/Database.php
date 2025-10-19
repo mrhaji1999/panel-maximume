@@ -2,6 +2,7 @@
 
 namespace UCB;
 
+use WP_Error;
 use wpdb;
 
 /**
@@ -379,8 +380,9 @@ class Database {
      * Insert status log.
      *
      * @param array<string, mixed> $data
+     * @return int|WP_Error Insert ID on success or WP_Error on failure.
      */
-    public function log_status_change(array $data): int {
+    public function log_status_change(array $data) {
         $defaults = [
             'customer_id' => 0,
             'old_status'  => null,
@@ -390,20 +392,49 @@ class Database {
             'created_at'  => current_time('mysql'),
         ];
 
-        $payload = wp_parse_args($data, $defaults);
+        $parsed = wp_parse_args($data, $defaults);
 
-        $this->db->insert(
+        $columns = [
+            'customer_id' => '%d',
+            'old_status'  => '%s',
+            'new_status'  => '%s',
+            'changed_by'  => '%d',
+            'reason'      => '%s',
+            'created_at'  => '%s',
+        ];
+
+        $payload = [];
+        $formats = [];
+
+        foreach ($columns as $column => $format) {
+            if (array_key_exists($column, $parsed)) {
+                $value = $parsed[$column];
+
+                if ('reason' === $column && ('' === $value || null === $value)) {
+                    $value = null;
+                }
+
+                $payload[$column] = $value;
+                $formats[] = $format;
+            }
+        }
+
+        $result = $this->db->insert(
             $this->status_logs_table(),
             $payload,
-            [
-                '%d',
-                '%s',
-                '%s',
-                '%d',
-                '%s',
-                '%s',
-            ]
+            $formats
         );
+
+        if (false === $result) {
+            return new WP_Error(
+                'ucb_status_log_failed',
+                __('Failed to log status change.', 'user-cards-bridge'),
+                [
+                    'db_error' => $this->db->last_error,
+                    'payload'  => $payload,
+                ]
+            );
+        }
 
         return (int) $this->db->insert_id;
     }
