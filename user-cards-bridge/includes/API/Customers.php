@@ -81,6 +81,8 @@ class Customers extends BaseController {
             'supervisor_id' => $request->get_param('supervisor_id'),
             'agent_id'      => $request->get_param('agent_id'),
             'search'        => $request->get_param('search'),
+            'registered_date' => $request->get_param('registered_date'),
+            'order'         => $request->get_param('order'),
         ];
 
         $page = max(1, (int) $request->get_param('page') ?: 1);
@@ -103,7 +105,7 @@ class Customers extends BaseController {
     }
 
     public function customer_tabs(WP_REST_Request $request) {
-        $tabs = ['upsell_pending', 'upsell_paid'];
+        $tabs = ['unassigned', 'upsell_pending', 'upsell_paid'];
         $data = [];
         $role = Roles::get_user_role(get_current_user_id());
 
