@@ -52,7 +52,7 @@ The build output appears in `panel/dist`. Upload the built assets to your hostin
 The panel expects an environment variable to know where the WordPress API lives. Edit `panel/.env` (or create one in production) with:
 
 ```
-VITE_API_BASE=https://maximum.stoor.ir
+VITE_API_BASE=https://maximumclub.ir
 VITE_API_ALLOW_CROSS_ORIGIN=true
 ```
 
@@ -72,7 +72,7 @@ Create a pull request on GitHub if you use a different deployment branch. Once m
 ## 7. Troubleshooting
 
 * **CORS errors** – make sure the WordPress site is sending the `Access-Control-Allow-Origin` header. The latest plugin code automatically responds with either the configured panel origin or `*` as a fallback.
-* **Login 404 errors** – confirm the panel is pointing at `https://maximum.stoor.ir/wp-json/user-cards-bridge/v1/`. Update the panel environment variables and rebuild if necessary.
+* **Login 404 errors** – confirm the panel is pointing at `https://maximumclub.ir/wp-json/user-cards-bridge/v1/`. Update the panel environment variables and rebuild if necessary.
 * **Playback controls errors** – ensure the panel `public/speed.js` file is deployed so the DOM helpers can find the `<video>` element safely.
 
 Following these steps keeps both the WordPress plugin and the panel front-end aligned with the latest GitHub fixes.
