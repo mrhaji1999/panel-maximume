@@ -64,6 +64,26 @@ class CustomerService {
             'meta_query' => $meta_query,
         ];
 
+        if (!empty($filters['order'])) {
+            $order = strtoupper(sanitize_text_field((string) $filters['order']));
+            if (in_array($order, ['ASC', 'DESC'], true)) {
+                $args['order'] = $order;
+            }
+        }
+
+        if (!empty($filters['registered_date'])) {
+            $date = sanitize_text_field((string) $filters['registered_date']);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $args['date_query'] = [
+                    [
+                        'after'     => $date . ' 00:00:00',
+                        'before'    => $date . ' 23:59:59',
+                        'inclusive' => true,
+                    ],
+                ];
+            }
+        }
+
         if (!empty($filters['search'])) {
             $search = sanitize_text_field($filters['search']);
             $args['search'] = '*' . $search . '*';
@@ -146,6 +166,14 @@ class CustomerService {
             $params[] = $search;
         }
 
+        if (!empty($filters['registered_date'])) {
+            $date = sanitize_text_field((string) $filters['registered_date']);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $where[] = 'DATE(users.user_registered) = %s';
+                $params[] = $date;
+            }
+        }
+
         $sql = "SELECT status_meta.meta_value AS status, COUNT(*) AS total
                 FROM {$wpdb->usermeta} status_meta
                 " . implode(' ', $joins) . "
@@ -203,7 +231,7 @@ class CustomerService {
             'last_name'                => $user->last_name,
             'display_name'             => $user->display_name,
             'phone'                    => get_user_meta($user_id, 'phone', true),
-            'status'                   => get_user_meta($user_id, 'ucb_customer_status', true) ?: 'normal',
+            'status'                   => get_user_meta($user_id, 'ucb_customer_status', true) ?: 'unassigned',
             'assigned_supervisor'      => $supervisor_id,
             'assigned_supervisor_name' => $supervisor_name,
             'assigned_agent'           => $agent_id,
@@ -217,7 +245,102 @@ class CustomerService {
             'upsell_order_id'          => (int) get_user_meta($user_id, 'ucb_upsell_order_id', true),
             'upsell_pay_link'          => get_user_meta($user_id, 'ucb_upsell_pay_link', true) ?: null,
             'registered_at'            => mysql_to_rfc3339($user->user_registered),
+            'form_data'                => $this->get_sanitized_form_data($user_id),
         ];
+    }
+
+    /**
+     * Retrieve sanitized customer form data.
+     *
+     * @return array<int, array{label: string, value: string}>
+     */
+    private function get_sanitized_form_data(int $user_id): array {
+        $raw_data = get_user_meta($user_id, 'ucb_customer_form_data', true);
+
+        $entries = $this->normalize_form_entries($raw_data);
+
+        if (empty($entries)) {
+            return [];
+        }
+
+        $sanitized = [];
+
+        foreach ($entries as $key => $value) {
+            $label = $this->resolve_form_label($key, $value);
+            $sanitized[] = [
+                'label' => $label,
+                'value' => $this->sanitize_form_value($value),
+            ];
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Normalize stored form entries into an array structure.
+     *
+     * @param mixed $raw_data
+     * @return array<int|string, mixed>
+     */
+    private function normalize_form_entries($raw_data): array {
+        if (is_array($raw_data)) {
+            return $raw_data;
+        }
+
+        if (is_string($raw_data) && $raw_data !== '') {
+            $decoded = json_decode($raw_data, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+
+            return [
+                [
+                    'label' => __('Form data', UCB_TEXT_DOMAIN),
+                    'value' => $raw_data,
+                ],
+            ];
+        }
+
+        return [];
+    }
+
+    private function resolve_form_label($key, $value): string {
+        if (is_array($value) && isset($value['label'])) {
+            return sanitize_text_field((string) $value['label']);
+        }
+
+        if (is_string($key) && $key !== '') {
+            return sanitize_text_field($key);
+        }
+
+        $index = is_numeric($key) ? ((int) $key + 1) : 1;
+
+        return sprintf(__('Field %d', UCB_TEXT_DOMAIN), max(1, $index));
+    }
+
+    private function sanitize_form_value($value): string {
+        if (is_array($value) && isset($value['value'])) {
+            return $this->sanitize_form_value($value['value']);
+        }
+
+        if (is_array($value)) {
+            $flattened = array_map(function ($item) {
+                return $this->sanitize_form_value($item);
+            }, $value);
+
+            $flattened = array_filter($flattened, function ($item) {
+                return $item !== '';
+            });
+
+            return implode(', ', $flattened);
+        }
+
+        if (is_scalar($value)) {
+            return sanitize_text_field((string) $value);
+        }
+
+        return '';
     }
 
     /**
