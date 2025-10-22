@@ -26,35 +26,45 @@ class CustomerService {
      * @return array{items: array<int, array<string, mixed>>, total: int}
      */
     public function list_customers(array $filters, int $page = 1, int $per_page = 20): array {
-        $meta_query = [];
+        $meta_query_clauses = [];
 
-        if (!empty($filters['status'])) {
-            $meta_query[] = [
+        $status_filter = !empty($filters['status']) ? sanitize_key($filters['status']) : null;
+
+        if ('unassigned' === $status_filter) {
+            return $this->list_unassigned_customers($filters, $page, $per_page);
+        }
+
+        if ($status_filter) {
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_status',
-                'value' => sanitize_key($filters['status']),
+                'value' => $status_filter,
             ];
         }
 
         if (!empty($filters['card_id'])) {
-            $meta_query[] = [
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_card_id',
                 'value' => (int) $filters['card_id'],
             ];
         }
 
         if (!empty($filters['supervisor_id'])) {
-            $meta_query[] = [
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_assigned_supervisor',
                 'value' => (int) $filters['supervisor_id'],
             ];
         }
 
         if (!empty($filters['agent_id'])) {
-            $meta_query[] = [
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_assigned_agent',
                 'value' => (int) $filters['agent_id'],
             ];
         }
+
+        $meta_query = empty($meta_query_clauses)
+            ? []
+            : array_merge(['relation' => 'AND'], $meta_query_clauses);
 
         $args = [
             'number'     => $per_page,
@@ -62,6 +72,7 @@ class CustomerService {
             'orderby'    => 'registered',
             'order'      => 'DESC',
             'meta_query' => $meta_query,
+            'role__in'   => ['customer'],
         ];
 
         if (!empty($filters['order'])) {
@@ -103,6 +114,106 @@ class CustomerService {
     }
 
     /**
+     * Fetch customers without an explicit status assignment.
+     *
+     * @param array<string, mixed> $filters
+     * @return array{items: array<int, array<string, mixed>>, total: int}
+     */
+    private function list_unassigned_customers(array $filters, int $page, int $per_page): array {
+        global $wpdb;
+
+        $joins = [];
+        $where = ['1=1'];
+        $params = [];
+
+        $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
+        $role_join = $wpdb->prepare(
+            "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = users.ID AND role_meta.meta_key = %s",
+            $capabilities_key
+        );
+
+        $joins[] = $role_join;
+        $where[] = 'role_meta.meta_value LIKE %s';
+        $params[] = '%' . $wpdb->esc_like('"customer"') . '%';
+
+        $joins[] = "LEFT JOIN {$wpdb->usermeta} status_meta ON status_meta.user_id = users.ID AND status_meta.meta_key = 'ucb_customer_status'";
+        $where[] = "(status_meta.meta_value IS NULL OR status_meta.meta_value = '' OR status_meta.meta_value = 'unassigned')";
+
+        if (!empty($filters['card_id'])) {
+            $joins[] = "INNER JOIN {$wpdb->usermeta} card_meta ON card_meta.user_id = users.ID AND card_meta.meta_key = 'ucb_customer_card_id'";
+            $where[] = 'card_meta.meta_value = %d';
+            $params[] = (int) $filters['card_id'];
+        }
+
+        if (!empty($filters['supervisor_id'])) {
+            $joins[] = "INNER JOIN {$wpdb->usermeta} supervisor_meta ON supervisor_meta.user_id = users.ID AND supervisor_meta.meta_key = 'ucb_customer_assigned_supervisor'";
+            $where[] = 'supervisor_meta.meta_value = %d';
+            $params[] = (int) $filters['supervisor_id'];
+        }
+
+        if (!empty($filters['agent_id'])) {
+            $joins[] = "INNER JOIN {$wpdb->usermeta} agent_meta ON agent_meta.user_id = users.ID AND agent_meta.meta_key = 'ucb_customer_assigned_agent'";
+            $where[] = 'agent_meta.meta_value = %d';
+            $params[] = (int) $filters['agent_id'];
+        }
+
+        if (!empty($filters['search'])) {
+            $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
+            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
+            $params[] = $search;
+            $params[] = $search;
+            $params[] = $search;
+        }
+
+        if (!empty($filters['registered_date'])) {
+            $date = sanitize_text_field((string) $filters['registered_date']);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $where[] = 'DATE(users.user_registered) = %s';
+                $params[] = $date;
+            }
+        }
+
+        $order = 'DESC';
+        if (!empty($filters['order'])) {
+            $maybe_order = strtoupper(sanitize_text_field((string) $filters['order']));
+            if (in_array($maybe_order, ['ASC', 'DESC'], true)) {
+                $order = $maybe_order;
+            }
+        }
+
+        $offset = max(0, ($page - 1) * $per_page);
+
+        $base_from = "FROM {$wpdb->users} users " . implode(' ', array_unique($joins));
+        $base_where = 'WHERE ' . implode(' AND ', $where);
+
+        $count_sql = "SELECT COUNT(DISTINCT users.ID) {$base_from} {$base_where}";
+        $count_query = !empty($params) ? $wpdb->prepare($count_sql, ...$params) : $count_sql;
+        $total = (int) $wpdb->get_var($count_query);
+
+        $items_sql = "SELECT DISTINCT users.ID {$base_from} {$base_where} ORDER BY users.user_registered {$order} LIMIT %d OFFSET %d";
+        $items_params = array_merge($params, [$per_page, $offset]);
+        $items_query = $wpdb->prepare($items_sql, ...$items_params);
+        $ids = array_map('intval', (array) $wpdb->get_col($items_query));
+
+        $users = [];
+        foreach ($ids as $user_id) {
+            $user = get_user_by('id', $user_id);
+            if ($user instanceof WP_User) {
+                $users[] = $user;
+            }
+        }
+
+        $items = array_map(function (WP_User $user) {
+            return $this->format_customer($user);
+        }, $users);
+
+        return [
+            'items' => $items,
+            'total' => $total,
+        ];
+    }
+
+    /**
      * Count customers matching filters.
      */
     public function count_customers(array $filters = []): int {
@@ -131,9 +242,21 @@ class CustomerService {
             $filters['agent_id'] = $user_id;
         }
 
-        $joins = ["INNER JOIN {$wpdb->users} users ON users.ID = status_meta.user_id"];
-        $where = ["status_meta.meta_key = 'ucb_customer_status'"];
-        $params = [];
+        $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
+        $role_join = $wpdb->prepare(
+            "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = status_meta.user_id AND role_meta.meta_key = %s",
+            $capabilities_key
+        );
+
+        $joins = [
+            "INNER JOIN {$wpdb->users} users ON users.ID = status_meta.user_id",
+            $role_join,
+        ];
+        $where = [
+            "status_meta.meta_key = 'ucb_customer_status'",
+            'role_meta.meta_value LIKE %s',
+        ];
+        $params = ['%' . $wpdb->esc_like('"customer"') . '%'];
 
         if (!empty($filters['status'])) {
             $where[] = 'status_meta.meta_value = %s';
