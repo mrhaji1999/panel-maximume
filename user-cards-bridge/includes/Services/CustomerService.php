@@ -26,35 +26,60 @@ class CustomerService {
      * @return array{items: array<int, array<string, mixed>>, total: int}
      */
     public function list_customers(array $filters, int $page = 1, int $per_page = 20): array {
-        $meta_query = [];
+        $meta_query_clauses = [];
 
         if (!empty($filters['status'])) {
-            $meta_query[] = [
-                'key'   => 'ucb_customer_status',
-                'value' => sanitize_key($filters['status']),
-            ];
+            $status = sanitize_key($filters['status']);
+
+            if ('unassigned' === $status) {
+                $meta_query_clauses[] = [
+                    'relation' => 'OR',
+                    [
+                        'key'   => 'ucb_customer_status',
+                        'value' => 'unassigned',
+                    ],
+                    [
+                        'key'     => 'ucb_customer_status',
+                        'compare' => 'NOT EXISTS',
+                    ],
+                    [
+                        'key'     => 'ucb_customer_status',
+                        'value'   => '',
+                        'compare' => '=',
+                    ],
+                ];
+            } else {
+                $meta_query_clauses[] = [
+                    'key'   => 'ucb_customer_status',
+                    'value' => $status,
+                ];
+            }
         }
 
         if (!empty($filters['card_id'])) {
-            $meta_query[] = [
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_card_id',
                 'value' => (int) $filters['card_id'],
             ];
         }
 
         if (!empty($filters['supervisor_id'])) {
-            $meta_query[] = [
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_assigned_supervisor',
                 'value' => (int) $filters['supervisor_id'],
             ];
         }
 
         if (!empty($filters['agent_id'])) {
-            $meta_query[] = [
+            $meta_query_clauses[] = [
                 'key'   => 'ucb_customer_assigned_agent',
                 'value' => (int) $filters['agent_id'],
             ];
         }
+
+        $meta_query = empty($meta_query_clauses)
+            ? []
+            : array_merge(['relation' => 'AND'], $meta_query_clauses);
 
         $args = [
             'number'     => $per_page,
