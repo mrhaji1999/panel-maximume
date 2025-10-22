@@ -26,7 +26,7 @@ import {
   CustomerTabsResponse,
   UpsellSmsResult,
 } from '@/types'
-import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
+import { formatDateTime, formatJalaliDate, formatNumber, getErrorMessage } from '@/lib/utils'
 import {
   Filter,
   Loader2,
@@ -690,12 +690,30 @@ function CustomerRow({
   const isUpsellSubmitting = upsellCustomerId === customer.id
   const rowDisabled = disabled || isStatusUpdating
 
+  const sanitizedPhone = customer.phone ? customer.phone.replace(/[^+\d]/g, '') : ''
   const showUpsellControls = selectedStatus === 'upsell'
   const showNoteButton = typeof onOpenNoteDialog === 'function'
   const showAssignSupervisorButton = typeof onOpenAssignSupervisor === 'function'
   const showAssignAgentButton = typeof onOpenAssignAgent === 'function'
-  const showCallAction = Boolean(showCallButton && customer.phone)
+  const showCallAction = Boolean(showCallButton && sanitizedPhone)
   const showFormInfoButton = typeof onShowFormInfo === 'function'
+
+  const scheduleTime = customer.form_schedule?.time ?? ''
+  const rawScheduleDate = customer.form_schedule?.date ?? ''
+  const scheduleDate = useMemo(() => {
+    if (!rawScheduleDate) {
+      return ''
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawScheduleDate)) {
+      return formatJalaliDate(rawScheduleDate)
+    }
+    return rawScheduleDate
+  }, [rawScheduleDate])
+  const callLabel = scheduleTime
+    ? `تماس در ساعت ${scheduleTime}${scheduleDate ? ` (${scheduleDate})` : ''}`
+    : scheduleDate
+      ? `تماس در تاریخ ${scheduleDate}`
+      : 'تماس'
 
   const {
     data: cardFields = [],
@@ -916,10 +934,14 @@ function CustomerRow({
       {(showNoteButton || showAssignSupervisorButton || showAssignAgentButton || showCallAction || showFormInfoButton) && (
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           {showCallAction && customer.phone && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={`tel:${customer.phone}`} className="flex items-center gap-2">
+            <Button
+              size="sm"
+              asChild
+              className="bg-emerald-500 text-white hover:bg-emerald-600"
+            >
+              <a href={`tel://${sanitizedPhone}`} className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
-                <span>تماس</span>
+                <span>{callLabel}</span>
               </a>
             </Button>
           )}

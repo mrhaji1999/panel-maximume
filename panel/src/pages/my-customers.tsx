@@ -11,7 +11,11 @@ export function MyCustomersPage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<'customers' | 'daily' | 'assignment'>('customers')
   const [selectedDate, setSelectedDate] = useState<string>(getCurrentGregorianDate())
-  const [formDialogCustomer, setFormDialogCustomer] = useState<{ id: number; name: string } | null>(null)
+  const [formDialogCustomer, setFormDialogCustomer] = useState<{
+    id: number
+    name: string
+    registeredAt?: string
+  } | null>(null)
 
   const supervisorFilters = useMemo(() => {
     const filters: Record<string, string | number | undefined> = {}
@@ -33,6 +37,7 @@ export function MyCustomersPage() {
     setFormDialogCustomer({
       id: customer.id,
       name: customer.display_name || customer.email || `مشتری #${customer.id}`,
+      registeredAt: customer.registered_at,
     })
   }
 
@@ -67,7 +72,7 @@ export function MyCustomersPage() {
         assignmentTypes={['agent']}
         supervisorFilterForAgents={user?.id}
         emptyStateMessage="هیچ مشتری برای شما ثبت نشده است."
-        defaultStatus="unassigned"
+        defaultStatus="all"
         toolbarExtras={isDailyTab ? toolbarExtras : undefined}
         showCallButton
         onShowFormInfo={handleShowFormInfo}
@@ -76,6 +81,7 @@ export function MyCustomersPage() {
         open={Boolean(formDialogCustomer)}
         customerId={formDialogCustomer?.id ?? null}
         customerName={formDialogCustomer?.name}
+        registeredAt={formDialogCustomer?.registeredAt}
         onOpenChange={(open) => {
           if (!open) {
             setFormDialogCustomer(null)
