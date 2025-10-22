@@ -697,6 +697,15 @@ function CustomerRow({
   const showCallAction = Boolean(showCallButton && customer.phone)
   const showFormInfoButton = typeof onShowFormInfo === 'function'
 
+  const scheduleTime = customer.form_schedule?.time ?? ''
+  const scheduleDate = customer.form_schedule?.date ?? ''
+  const callLabel = scheduleTime
+    ? `تماس در ساعت ${scheduleTime}${scheduleDate ? ` (${scheduleDate})` : ''}`
+    : scheduleDate
+      ? `تماس در تاریخ ${scheduleDate}`
+      : 'تماس'
+  const sanitizedPhone = customer.phone ? customer.phone.replace(/\s+/g, '') : ''
+
   const {
     data: cardFields = [],
     isLoading: fieldsLoading,
@@ -916,10 +925,14 @@ function CustomerRow({
       {(showNoteButton || showAssignSupervisorButton || showAssignAgentButton || showCallAction || showFormInfoButton) && (
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           {showCallAction && customer.phone && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={`tel:${customer.phone}`} className="flex items-center gap-2">
+            <Button
+              size="sm"
+              asChild
+              className="bg-emerald-500 text-white hover:bg-emerald-600"
+            >
+              <a href={`tel://${sanitizedPhone}`} className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
-                <span>تماس</span>
+                <span>{callLabel}</span>
               </a>
             </Button>
           )}

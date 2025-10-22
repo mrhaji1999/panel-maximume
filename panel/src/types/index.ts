@@ -39,6 +39,7 @@ export interface Customer {
   upsell_order_id?: number
   upsell_pay_link?: string | null
   form_data?: CustomerFormField[]
+  form_schedule?: CustomerFormSchedule | null
 }
 
 export interface CustomerDetail extends Customer {
@@ -98,6 +99,11 @@ export type CustomerStatus =
 export interface CustomerFormField {
   label: string
   value: string
+}
+
+export interface CustomerFormSchedule {
+  date: string | null
+  time: string | null
 }
 
 export interface StatusLog {

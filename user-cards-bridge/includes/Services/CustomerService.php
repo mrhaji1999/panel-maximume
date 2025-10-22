@@ -72,6 +72,7 @@ class CustomerService {
             'orderby'    => 'registered',
             'order'      => 'DESC',
             'meta_query' => $meta_query,
+            'role__in'   => ['customer'],
         ];
 
         if (!empty($filters['order'])) {
@@ -124,6 +125,16 @@ class CustomerService {
         $joins = [];
         $where = ['1=1'];
         $params = [];
+
+        $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
+        $role_join = $wpdb->prepare(
+            "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = users.ID AND role_meta.meta_key = %s",
+            $capabilities_key
+        );
+
+        $joins[] = $role_join;
+        $where[] = 'role_meta.meta_value LIKE %s';
+        $params[] = '%' . $wpdb->esc_like('"customer"') . '%';
 
         $joins[] = "LEFT JOIN {$wpdb->usermeta} status_meta ON status_meta.user_id = users.ID AND status_meta.meta_key = 'ucb_customer_status'";
         $where[] = "(status_meta.meta_value IS NULL OR status_meta.meta_value = '' OR status_meta.meta_value = 'unassigned')";
@@ -231,9 +242,21 @@ class CustomerService {
             $filters['agent_id'] = $user_id;
         }
 
-        $joins = ["INNER JOIN {$wpdb->users} users ON users.ID = status_meta.user_id"];
-        $where = ["status_meta.meta_key = 'ucb_customer_status'"];
-        $params = [];
+        $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
+        $role_join = $wpdb->prepare(
+            "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = status_meta.user_id AND role_meta.meta_key = %s",
+            $capabilities_key
+        );
+
+        $joins = [
+            "INNER JOIN {$wpdb->users} users ON users.ID = status_meta.user_id",
+            $role_join,
+        ];
+        $where = [
+            "status_meta.meta_key = 'ucb_customer_status'",
+            'role_meta.meta_value LIKE %s',
+        ];
+        $params = ['%' . $wpdb->esc_like('"customer"') . '%'];
 
         if (!empty($filters['status'])) {
             $where[] = 'status_meta.meta_value = %s';
@@ -323,6 +346,20 @@ class CustomerService {
         $agent_name = $agent_id ? $this->get_user_display_name($agent_id) : null;
         $card_title = $card_id ? get_the_title($card_id) : null;
 
+        $form_data = $this->get_sanitized_form_data($user_id);
+        $submission_data = $this->get_latest_submission_data($user_id);
+
+        if (!empty($submission_data['fields'])) {
+            $form_data = $this->merge_form_fields($form_data, $submission_data['fields']);
+        }
+
+        $phone_meta = get_user_meta($user_id, 'ucb_customer_phone', true);
+        if ('' === $phone_meta) {
+            $phone_meta = get_user_meta($user_id, 'phone', true);
+        }
+
+        $phone_value = is_scalar($phone_meta) ? (string) $phone_meta : '';
+
         return [
             'id'                        => $user_id,
             'username'                 => $user->user_login,
@@ -330,7 +367,7 @@ class CustomerService {
             'first_name'               => $user->first_name,
             'last_name'                => $user->last_name,
             'display_name'             => $user->display_name,
-            'phone'                    => get_user_meta($user_id, 'phone', true),
+            'phone'                    => $phone_value !== '' ? $phone_value : null,
             'status'                   => get_user_meta($user_id, 'ucb_customer_status', true) ?: 'unassigned',
             'assigned_supervisor'      => $supervisor_id,
             'assigned_supervisor_name' => $supervisor_name,
@@ -345,7 +382,8 @@ class CustomerService {
             'upsell_order_id'          => (int) get_user_meta($user_id, 'ucb_upsell_order_id', true),
             'upsell_pay_link'          => get_user_meta($user_id, 'ucb_upsell_pay_link', true) ?: null,
             'registered_at'            => mysql_to_rfc3339($user->user_registered),
-            'form_data'                => $this->get_sanitized_form_data($user_id),
+            'form_data'                => $form_data,
+            'form_schedule'            => $submission_data['schedule'],
         ];
     }
 
@@ -374,6 +412,146 @@ class CustomerService {
         }
 
         return $sanitized;
+    }
+
+    /**
+     * Retrieve latest submission data to hydrate form fields.
+     *
+     * @return array{fields: array<int, array{label: string, value: string}>, schedule: array{date: ?string, time: ?string}}
+     */
+    private function get_latest_submission_data(int $user_id): array {
+        $submissions = get_posts([
+            'post_type'      => 'uc_submission',
+            'post_status'    => 'any',
+            'posts_per_page' => 1,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'fields'         => 'ids',
+            'meta_query'     => [
+                [
+                    'key'   => '_uc_user_id',
+                    'value' => $user_id,
+                    'compare' => '=',
+                ],
+            ],
+        ]);
+
+        if (empty($submissions)) {
+            return [
+                'fields' => [],
+                'schedule' => [
+                    'date' => null,
+                    'time' => null,
+                ],
+            ];
+        }
+
+        $submission_id = (int) $submissions[0];
+
+        $field_map = [
+            '_uc_code'     => __('کد رزرو', UCB_TEXT_DOMAIN),
+            '_uc_date'     => __('تاریخ رزرو', UCB_TEXT_DOMAIN),
+            '_uc_time'     => __('ساعت رزرو', UCB_TEXT_DOMAIN),
+            '_uc_surprise' => __('کد شگفتانه', UCB_TEXT_DOMAIN),
+        ];
+
+        $fields = [];
+
+        foreach ($field_map as $meta_key => $label) {
+            $value = $this->sanitize_form_value(get_post_meta($submission_id, $meta_key, true));
+            if ('' !== $value) {
+                $fields[] = [
+                    'label' => $label,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        $custom_fields = get_post_meta($submission_id, '_uc_meta_fields', true);
+        if (is_array($custom_fields)) {
+            foreach ($custom_fields as $key => $value) {
+                $fields[] = [
+                    'label' => $this->resolve_form_label($key, $value),
+                    'value' => $this->sanitize_form_value($value),
+                ];
+            }
+        }
+
+        $date_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_date', true));
+        $time_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_time', true));
+
+        return [
+            'fields' => $fields,
+            'schedule' => [
+                'date' => '' !== $date_value ? $date_value : null,
+                'time' => '' !== $time_value ? $time_value : null,
+            ],
+        ];
+    }
+
+    /**
+     * Merge primary form entries with fallback submission data.
+     *
+     * @param array<int, array{label: string, value: string}> $primary
+     * @param array<int, array{label: string, value: string}> $secondary
+     * @return array<int, array{label: string, value: string}>
+     */
+    private function merge_form_fields(array $primary, array $secondary): array {
+        if (empty($secondary)) {
+            return $primary;
+        }
+
+        if (empty($primary)) {
+            return $secondary;
+        }
+
+        $seen = [];
+        foreach ($primary as $field) {
+            if (!isset($field['label'])) {
+                continue;
+            }
+
+            $normalized = $this->normalize_label_key((string) $field['label']);
+            if ('' !== $normalized) {
+                $seen[] = $normalized;
+            }
+        }
+
+        foreach ($secondary as $field) {
+            if (!isset($field['label'], $field['value'])) {
+                continue;
+            }
+
+            $normalized = $this->normalize_label_key((string) $field['label']);
+
+            if ('' === $normalized || in_array($normalized, $seen, true)) {
+                continue;
+            }
+
+            $primary[] = [
+                'label' => (string) $field['label'],
+                'value' => (string) $field['value'],
+            ];
+            $seen[] = $normalized;
+        }
+
+        return $primary;
+    }
+
+    private function normalize_label_key(string $label): string {
+        $label = trim($label);
+
+        if ('' === $label) {
+            return '';
+        }
+
+        if (function_exists('mb_strtolower')) {
+            $label = mb_strtolower($label, 'UTF-8');
+        } else {
+            $label = strtolower($label);
+        }
+
+        return $label;
     }
 
     /**
