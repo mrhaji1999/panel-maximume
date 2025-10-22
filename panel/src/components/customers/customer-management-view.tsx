@@ -709,11 +709,13 @@ function CustomerRow({
     }
     return rawScheduleDate
   }, [rawScheduleDate])
+  const scheduleDate = customer.form_schedule?.date ?? ''
   const callLabel = scheduleTime
     ? `تماس در ساعت ${scheduleTime}${scheduleDate ? ` (${scheduleDate})` : ''}`
     : scheduleDate
       ? `تماس در تاریخ ${scheduleDate}`
       : 'تماس'
+  const sanitizedPhone = customer.phone ? customer.phone.replace(/\s+/g, '') : ''
 
   const {
     data: cardFields = [],
