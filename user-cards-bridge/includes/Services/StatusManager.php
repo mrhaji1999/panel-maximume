@@ -22,47 +22,54 @@ class StatusManager {
      */
     public function get_default_statuses() {
         return [
+            'unassigned' => [
+                'label' => __('Unassigned', UCB_TEXT_DOMAIN),
+                'description' => __('Waiting for supervisor assignment to an agent', UCB_TEXT_DOMAIN),
+                'color' => '#6c757d',
+                'icon' => 'dashicons-admin-users',
+                'order' => 1,
+            ],
             'no_answer' => [
                 'label' => __('No Answer', UCB_TEXT_DOMAIN),
                 'description' => __('Customer did not answer the call', UCB_TEXT_DOMAIN),
                 'color' => '#ffc107',
                 'icon' => 'dashicons-phone',
-                'order' => 1,
+                'order' => 2,
             ],
             'canceled' => [
                 'label' => __('Canceled', UCB_TEXT_DOMAIN),
                 'description' => __('Customer canceled the service', UCB_TEXT_DOMAIN),
                 'color' => '#dc3545',
                 'icon' => 'dashicons-no-alt',
-                'order' => 2,
+                'order' => 3,
             ],
             'upsell' => [
                 'label' => __('Upsell', UCB_TEXT_DOMAIN),
                 'description' => __('Customer interested in additional services', UCB_TEXT_DOMAIN),
                 'color' => '#17a2b8',
                 'icon' => 'dashicons-arrow-up-alt',
-                'order' => 3,
+                'order' => 4,
             ],
             'normal' => [
                 'label' => __('Normal', UCB_TEXT_DOMAIN),
                 'description' => __('Regular customer status', UCB_TEXT_DOMAIN),
                 'color' => '#28a745',
                 'icon' => 'dashicons-yes',
-                'order' => 4,
+                'order' => 5,
             ],
             'upsell_pending' => [
                 'label' => __('Upsell Pending', UCB_TEXT_DOMAIN),
                 'description' => __('Waiting for upsell payment', UCB_TEXT_DOMAIN),
                 'color' => '#fd7e14',
                 'icon' => 'dashicons-clock',
-                'order' => 5,
+                'order' => 6,
             ],
             'upsell_paid' => [
                 'label' => __('Upsell Paid', UCB_TEXT_DOMAIN),
                 'description' => __('Upsell payment completed', UCB_TEXT_DOMAIN),
                 'color' => '#6f42c1',
                 'icon' => 'dashicons-yes-alt',
-                'order' => 6,
+                'order' => 7,
             ],
         ];
     }
@@ -285,6 +292,7 @@ class StatusManager {
      */
     public function get_transition_rules() {
         return [
+            'unassigned' => ['normal', 'no_answer', 'canceled', 'upsell'],
             'no_answer' => ['canceled', 'normal', 'upsell'],
             'canceled' => ['normal', 'upsell'],
             'upsell' => ['upsell_pending', 'normal', 'canceled'],

@@ -26,9 +26,44 @@ export function formatTime(date: string | Date): string {
   return formatDate(date, 'HH:mm')
 }
 
+function ensureDateObject(date: string | Date): Date | null {
+  try {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date
+    if (!isValid(dateObj)) return null
+    return dateObj
+  } catch {
+    return null
+  }
+}
+
+function padNumber(value: number): string {
+  return value.toString().padStart(2, '0')
+}
+
+export function formatJalaliDate(date: string | Date): string {
+  const dateObj = ensureDateObject(date)
+  if (!dateObj) return 'تاریخ نامعتبر'
+
+  try {
+    return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(dateObj)
+  } catch {
+    return formatDate(dateObj, 'yyyy/MM/dd')
+  }
+}
+
+export function getCurrentGregorianDate(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${padNumber(now.getMonth() + 1)}-${padNumber(now.getDate())}`
+}
+
 // Status utilities
 export function getStatusLabel(status: string): string {
   const statusLabels: Record<string, string> = {
+    'unassigned': 'تعیین نشده',
     'no_answer': 'جواب نداد',
     'canceled': 'انصراف داد',
     'upsell': 'خرید افزایشی',
@@ -41,6 +76,7 @@ export function getStatusLabel(status: string): string {
 
 export function getStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
+    'unassigned': 'status-unassigned',
     'no_answer': 'status-no-answer',
     'canceled': 'status-canceled',
     'upsell': 'status-upsell',
