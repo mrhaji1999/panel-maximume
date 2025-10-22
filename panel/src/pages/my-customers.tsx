@@ -67,7 +67,7 @@ export function MyCustomersPage() {
         assignmentTypes={['agent']}
         supervisorFilterForAgents={user?.id}
         emptyStateMessage="هیچ مشتری برای شما ثبت نشده است."
-        defaultStatus="unassigned"
+        defaultStatus="all"
         toolbarExtras={isDailyTab ? toolbarExtras : undefined}
         showCallButton
         onShowFormInfo={handleShowFormInfo}

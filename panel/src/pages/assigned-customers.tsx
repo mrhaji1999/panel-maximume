@@ -87,7 +87,7 @@ export function AssignedCustomersPage() {
         assignmentTypes={[]}
         allowNotes
         emptyStateMessage="هنوز مشتری تخصیص‌یافته‌ای ندارید."
-        defaultStatus="unassigned"
+        defaultStatus="all"
         toolbarExtras={isDailyTab ? toolbarExtras : undefined}
         showCallButton
         onShowFormInfo={handleShowFormInfo}
