@@ -9,19 +9,23 @@ import type { Customer } from '@/types'
 
 export function AssignedCustomersPage() {
   const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState<'recent' | 'daily'>('recent')
   const [selectedDate, setSelectedDate] = useState<string>(getCurrentGregorianDate())
   const [formDialogCustomer, setFormDialogCustomer] = useState<{ id: number; name: string } | null>(null)
 
-  const baseFilters = useMemo(() => {
+  const recentFilters = useMemo(() => {
     const filters: Record<string, string | number | undefined> = {}
     if (user?.id) {
       filters.agent_id = user.id
     }
-    if (selectedDate) {
-      filters.registered_date = selectedDate
-    }
     return filters
-  }, [user?.id, selectedDate])
+  }, [user?.id])
+
+  const dailyFilters = useMemo(() => {
+    const filters: Record<string, string | number | undefined> = { ...recentFilters }
+    filters.registered_date = selectedDate
+    return filters
+  }, [recentFilters, selectedDate])
 
   const jalaliDateLabel = formatJalaliDate(selectedDate)
 
@@ -61,18 +65,30 @@ export function AssignedCustomersPage() {
     )
   }
 
+  const isDailyTab = activeTab === 'daily'
+  const appliedFilters = isDailyTab ? dailyFilters : recentFilters
+
   return (
     <>
+      <div className="mb-4 flex items-center gap-2">
+        <Button variant={activeTab === 'recent' ? 'default' : 'outline'} onClick={() => setActiveTab('recent')}>
+          جدیدترین‌ها
+        </Button>
+        <Button variant={activeTab === 'daily' ? 'default' : 'outline'} onClick={() => setActiveTab('daily')}>
+          بر اساس تاریخ
+        </Button>
+      </div>
+
       <CustomerManagementView
         title="مشتریان تخصیص‌یافته"
         description="مشتریانی که شما مسئول آن‌ها هستید"
         perPage={20}
-        baseFilters={baseFilters}
+        baseFilters={appliedFilters}
         assignmentTypes={[]}
         allowNotes
         emptyStateMessage="هنوز مشتری تخصیص‌یافته‌ای ندارید."
         defaultStatus="unassigned"
-        toolbarExtras={toolbarExtras}
+        toolbarExtras={isDailyTab ? toolbarExtras : undefined}
         showCallButton
         onShowFormInfo={handleShowFormInfo}
       />

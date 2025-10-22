@@ -9,20 +9,23 @@ import type { Customer } from '@/types'
 
 export function MyCustomersPage() {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState<'customers' | 'assignment'>('customers')
+  const [activeTab, setActiveTab] = useState<'customers' | 'daily' | 'assignment'>('customers')
   const [selectedDate, setSelectedDate] = useState<string>(getCurrentGregorianDate())
   const [formDialogCustomer, setFormDialogCustomer] = useState<{ id: number; name: string } | null>(null)
 
-  const baseFilters = useMemo(() => {
+  const supervisorFilters = useMemo(() => {
     const filters: Record<string, string | number | undefined> = {}
     if (user?.id) {
       filters.supervisor_id = user.id
     }
-    if (selectedDate) {
-      filters.registered_date = selectedDate
-    }
     return filters
-  }, [user?.id, selectedDate])
+  }, [user?.id])
+
+  const dailyFilters = useMemo(() => {
+    const filters: Record<string, string | number | undefined> = { ...supervisorFilters }
+    filters.registered_date = selectedDate
+    return filters
+  }, [supervisorFilters, selectedDate])
 
   const jalaliDateLabel = formatJalaliDate(selectedDate)
 
@@ -51,52 +54,54 @@ export function MyCustomersPage() {
     </div>
   )
 
+  const isDailyTab = activeTab === 'daily'
+  const appliedFilters = isDailyTab ? dailyFilters : supervisorFilters
+
+  const renderCustomersView = () => (
+    <>
+      <CustomerManagementView
+        title="مشتریان من"
+        description="مشتریانی که به شما تخصیص داده شده‌اند"
+        perPage={20}
+        baseFilters={appliedFilters}
+        assignmentTypes={['agent']}
+        supervisorFilterForAgents={user?.id}
+        emptyStateMessage="هیچ مشتری برای شما ثبت نشده است."
+        defaultStatus="unassigned"
+        toolbarExtras={isDailyTab ? toolbarExtras : undefined}
+        showCallButton
+        onShowFormInfo={handleShowFormInfo}
+      />
+      <FormInfoDialog
+        open={Boolean(formDialogCustomer)}
+        customerId={formDialogCustomer?.id ?? null}
+        customerName={formDialogCustomer?.name}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFormDialogCustomer(null)
+          }
+        }}
+      />
+    </>
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button
-          variant={activeTab === 'customers' ? 'default' : 'outline'}
-          onClick={() => setActiveTab('customers')}
-        >
+        <Button variant={activeTab === 'customers' ? 'default' : 'outline'} onClick={() => setActiveTab('customers')}>
           لیست مشتریان
         </Button>
-        <Button
-          variant={activeTab === 'assignment' ? 'default' : 'outline'}
-          onClick={() => setActiveTab('assignment')}
-        >
+        <Button variant={activeTab === 'daily' ? 'default' : 'outline'} onClick={() => setActiveTab('daily')}>
+          مشتریان بر اساس تاریخ
+        </Button>
+        <Button variant={activeTab === 'assignment' ? 'default' : 'outline'} onClick={() => setActiveTab('assignment')}>
           تخصیص مشتری
         </Button>
       </div>
 
-      {activeTab === 'customers' ? (
-        <>
-          <CustomerManagementView
-            title="مشتریان من"
-            description="مشتریانی که به شما تخصیص داده شده‌اند"
-            perPage={20}
-            baseFilters={baseFilters}
-            assignmentTypes={['agent']}
-            supervisorFilterForAgents={user?.id}
-            emptyStateMessage="هیچ مشتری برای شما ثبت نشده است."
-            defaultStatus="unassigned"
-            toolbarExtras={toolbarExtras}
-            showCallButton
-            onShowFormInfo={handleShowFormInfo}
-          />
-          <FormInfoDialog
-            open={Boolean(formDialogCustomer)}
-            customerId={formDialogCustomer?.id ?? null}
-            customerName={formDialogCustomer?.name}
-            onOpenChange={(open) => {
-              if (!open) {
-                setFormDialogCustomer(null)
-              }
-            }}
-          />
-        </>
-      ) : user?.id ? (
-        <CustomerAssignmentTab supervisorId={user.id} />
-      ) : null}
+      {activeTab === 'assignment'
+        ? user?.id && <CustomerAssignmentTab supervisorId={user.id} />
+        : renderCustomersView()}
     </div>
   )
 }
