@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { customersApi } from '@/lib/api'
-import type { CustomerDetail } from '@/types'
+import { formsApi } from '@/lib/api'
+import type { CustomerFormField, FormSubmission } from '@/types'
 import { formatDateTime, getErrorMessage } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
 
@@ -17,24 +17,78 @@ interface FormInfoDialogProps {
   customerName?: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  registeredAt?: string
 }
 
-export function FormInfoDialog({ customerId, customerName, open, onOpenChange }: FormInfoDialogProps) {
-  const query = useQuery({
-    queryKey: ['customer-detail', customerId],
+export function FormInfoDialog({
+  customerId,
+  customerName,
+  open,
+  onOpenChange,
+  registeredAt,
+}: FormInfoDialogProps) {
+  const query = useQuery<FormSubmission | null>({
+    queryKey: ['customer-form-info', customerId],
     enabled: open && Boolean(customerId),
     queryFn: async () => {
       if (!customerId) throw new Error('شناسه مشتری نامعتبر است')
-      const response = await customersApi.getCustomer(customerId)
+      const response = await formsApi.getForms({ customer_id: customerId, per_page: 1 })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در دریافت اطلاعات فرم')
       }
-      return response.data as CustomerDetail
+      const items = response.data?.items ?? []
+      return items.length > 0 ? items[0] : null
     },
     staleTime: 1000 * 60,
   })
 
-  const formFields = useMemo(() => query.data?.form_data ?? [], [query.data?.form_data])
+  const formFields = useMemo<CustomerFormField[]>(() => {
+    if (!query.data) {
+      return []
+    }
+
+    const fields: CustomerFormField[] = []
+    const { meta } = query.data
+
+    const pushField = (label: string, value: unknown) => {
+      const normalizedLabel = (label || '').trim()
+      const normalizedValue = normalizeFormValue(value)
+      if (!normalizedLabel || !normalizedValue) {
+        return
+      }
+      fields.push({ label: normalizedLabel, value: normalizedValue })
+    }
+
+    pushField('کد رزرو', meta.code)
+    pushField('تاریخ رزرو', meta.date)
+    pushField('ساعت رزرو', meta.time)
+    pushField('کد شگفتانه', meta.surprise)
+
+    if (meta.meta && typeof meta.meta === 'object') {
+      Object.entries(meta.meta).forEach(([key, rawValue]) => {
+        const label = extractFieldLabel(key, rawValue)
+        const value = normalizeFormValue(rawValue)
+        if (value) {
+          fields.push({ label, value })
+        }
+      })
+    }
+
+    const seen = new Set<string>()
+    return fields.filter((field) => {
+      const key = field.label.trim()
+      if (!key) {
+        return false
+      }
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+  }, [query.data])
+
+  const registeredAtLabel = query.data?.created_at ?? registeredAt ?? null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,9 +97,9 @@ export function FormInfoDialog({ customerId, customerName, open, onOpenChange }:
           <DialogTitle>اطلاعات فرم رزرو</DialogTitle>
           <DialogDescription>
             اطلاعات ثبت‌شده برای {customerName || 'مشتری'}
-            {query.data?.registered_at && (
+            {registeredAtLabel && (
               <span className="block text-xs text-muted-foreground">
-                تاریخ ثبت‌نام: {formatDateTime(query.data.registered_at)}
+                تاریخ ثبت‌نام: {formatDateTime(registeredAtLabel)}
               </span>
             )}
           </DialogDescription>
@@ -79,4 +133,55 @@ export function FormInfoDialog({ customerId, customerName, open, onOpenChange }:
       </DialogContent>
     </Dialog>
   )
+}
+
+function normalizeFormValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeFormValue(item))
+      .filter((item) => item !== '')
+      .join('، ')
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if ('value' in record) {
+      return normalizeFormValue(record.value)
+    }
+
+    if ('label' in record && Object.keys(record).length === 1) {
+      return normalizeFormValue(record.label)
+    }
+
+    const nested = Object.values(record)
+      .map((item) => normalizeFormValue(item))
+      .filter((item) => item !== '')
+
+    return nested.join('، ')
+  }
+
+  return ''
+}
+
+function extractFieldLabel(key: string, value: unknown): string {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>
+    if (typeof record.label === 'string' && record.label.trim() !== '') {
+      return record.label.trim()
+    }
+  }
+
+  return key.replace(/_/g, ' ').trim() || key
 }

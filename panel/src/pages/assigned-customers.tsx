@@ -11,7 +11,11 @@ export function AssignedCustomersPage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<'recent' | 'daily'>('recent')
   const [selectedDate, setSelectedDate] = useState<string>(getCurrentGregorianDate())
-  const [formDialogCustomer, setFormDialogCustomer] = useState<{ id: number; name: string } | null>(null)
+  const [formDialogCustomer, setFormDialogCustomer] = useState<{
+    id: number
+    name: string
+    registeredAt?: string
+  } | null>(null)
 
   const recentFilters = useMemo(() => {
     const filters: Record<string, string | number | undefined> = {}
@@ -33,6 +37,7 @@ export function AssignedCustomersPage() {
     setFormDialogCustomer({
       id: customer.id,
       name: customer.display_name || customer.email || `مشتری #${customer.id}`,
+      registeredAt: customer.registered_at,
     })
   }
 
@@ -96,6 +101,7 @@ export function AssignedCustomersPage() {
         open={Boolean(formDialogCustomer)}
         customerId={formDialogCustomer?.id ?? null}
         customerName={formDialogCustomer?.name}
+        registeredAt={formDialogCustomer?.registeredAt}
         onOpenChange={(open) => {
           if (!open) {
             setFormDialogCustomer(null)

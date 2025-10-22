@@ -26,7 +26,7 @@ import {
   CustomerTabsResponse,
   UpsellSmsResult,
 } from '@/types'
-import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
+import { formatDateTime, formatJalaliDate, formatNumber, getErrorMessage } from '@/lib/utils'
 import {
   Filter,
   Loader2,
@@ -690,14 +690,25 @@ function CustomerRow({
   const isUpsellSubmitting = upsellCustomerId === customer.id
   const rowDisabled = disabled || isStatusUpdating
 
+  const sanitizedPhone = customer.phone ? customer.phone.replace(/[^+\d]/g, '') : ''
   const showUpsellControls = selectedStatus === 'upsell'
   const showNoteButton = typeof onOpenNoteDialog === 'function'
   const showAssignSupervisorButton = typeof onOpenAssignSupervisor === 'function'
   const showAssignAgentButton = typeof onOpenAssignAgent === 'function'
-  const showCallAction = Boolean(showCallButton && customer.phone)
+  const showCallAction = Boolean(showCallButton && sanitizedPhone)
   const showFormInfoButton = typeof onShowFormInfo === 'function'
 
   const scheduleTime = customer.form_schedule?.time ?? ''
+  const rawScheduleDate = customer.form_schedule?.date ?? ''
+  const scheduleDate = useMemo(() => {
+    if (!rawScheduleDate) {
+      return ''
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawScheduleDate)) {
+      return formatJalaliDate(rawScheduleDate)
+    }
+    return rawScheduleDate
+  }, [rawScheduleDate])
   const scheduleDate = customer.form_schedule?.date ?? ''
   const callLabel = scheduleTime
     ? `تماس در ساعت ${scheduleTime}${scheduleDate ? ` (${scheduleDate})` : ''}`
