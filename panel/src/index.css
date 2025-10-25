@@ -112,6 +112,10 @@
   @apply bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400;
 }
 
+.status-unassigned {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300;
+}
+
 /* Loading animation */
 @keyframes spin {
   to {

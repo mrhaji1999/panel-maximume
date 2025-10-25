@@ -38,6 +38,8 @@ export interface Customer {
   upsell_amount?: number
   upsell_order_id?: number
   upsell_pay_link?: string | null
+  form_data?: CustomerFormField[]
+  form_schedule?: CustomerFormSchedule | null
 }
 
 export interface CustomerDetail extends Customer {
@@ -85,13 +87,24 @@ export interface AgentListResponse {
   pagination: PaginationMeta
 }
 
-export type CustomerStatus = 
-  | 'no_answer' 
-  | 'canceled' 
-  | 'upsell' 
-  | 'normal' 
-  | 'upsell_pending' 
+export type CustomerStatus =
+  | 'unassigned'
+  | 'no_answer'
+  | 'canceled'
+  | 'upsell'
+  | 'normal'
+  | 'upsell_pending'
   | 'upsell_paid'
+
+export interface CustomerFormField {
+  label: string
+  value: string
+}
+
+export interface CustomerFormSchedule {
+  date: string | null
+  time: string | null
+}
 
 export interface StatusLog {
   id: number

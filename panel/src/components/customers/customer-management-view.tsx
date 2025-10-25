@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -26,7 +26,7 @@ import {
   CustomerTabsResponse,
   UpsellSmsResult,
 } from '@/types'
-import { formatDateTime, formatNumber, getErrorMessage } from '@/lib/utils'
+import { formatDateTime, formatJalaliDate, formatNumber, getErrorMessage } from '@/lib/utils'
 import {
   Filter,
   Loader2,
@@ -35,11 +35,14 @@ import {
   Send,
   UserCheck,
   ExternalLink,
+  Phone,
+  Info,
 } from 'lucide-react'
 
 type StatusFilter = 'all' | CustomerStatus
 
 const ALL_STATUSES: CustomerStatus[] = [
+  'unassigned',
   'normal',
   'upsell',
   'upsell_pending',
@@ -49,6 +52,7 @@ const ALL_STATUSES: CustomerStatus[] = [
 ]
 
 const STATUS_LABELS: Record<CustomerStatus, string> = {
+  unassigned: 'تعیین نشده',
   normal: 'عادی',
   upsell: 'خرید افزایشی',
   upsell_pending: 'خرید افزایشی در انتظار پرداخت',
@@ -74,6 +78,10 @@ export interface CustomerManagementViewProps {
   allowNotes?: boolean
   showStatusTabs?: boolean
   syncStatusWithUrl?: boolean
+  defaultStatus?: StatusFilter
+  toolbarExtras?: ReactNode
+  showCallButton?: boolean
+  onShowFormInfo?: (customer: Customer) => void
 }
 
 export function CustomerManagementView({
@@ -87,6 +95,10 @@ export function CustomerManagementView({
   allowNotes = true,
   showStatusTabs = true,
   syncStatusWithUrl = false,
+  defaultStatus = 'all',
+  toolbarExtras,
+  showCallButton = false,
+  onShowFormInfo,
 }: CustomerManagementViewProps) {
   const { user } = useAuth()
   const { success: notifySuccess, error: notifyError, info: notifyInfo } = useNotification()
@@ -94,7 +106,7 @@ export function CustomerManagementView({
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('all')
+  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>(defaultStatus)
   const [page, setPage] = useState(1)
 
   const [noteDialogCustomer, setNoteDialogCustomer] = useState<Customer | null>(null)
@@ -111,10 +123,24 @@ export function CustomerManagementView({
     }
 
     const statusParam = searchParams.get('status')
+    const fallbackStatus = defaultStatus
 
     if (!statusParam) {
-      if (selectedStatus !== 'all') {
-        setSelectedStatus('all')
+      if (fallbackStatus === 'all') {
+        if (selectedStatus !== 'all') {
+          setSelectedStatus('all')
+        }
+        return
+      }
+
+      if (selectedStatus !== fallbackStatus) {
+        setSelectedStatus(fallbackStatus)
+      }
+
+      const params = new URLSearchParams(searchParams)
+      if (params.get('status') !== fallbackStatus) {
+        params.set('status', fallbackStatus)
+        setSearchParams(params)
       }
       return
     }
@@ -129,7 +155,14 @@ export function CustomerManagementView({
     if (ALL_STATUSES.includes(statusParam as CustomerStatus) && selectedStatus !== (statusParam as StatusFilter)) {
       setSelectedStatus(statusParam as StatusFilter)
     }
-  }, [searchParams, selectedStatus, syncStatusWithUrl])
+  }, [searchParams, selectedStatus, syncStatusWithUrl, defaultStatus, setSearchParams])
+
+  useEffect(() => {
+    if (syncStatusWithUrl) {
+      return
+    }
+    setSelectedStatus(defaultStatus)
+  }, [defaultStatus, syncStatusWithUrl])
 
   useEffect(() => {
     setPage(1)
@@ -197,6 +230,7 @@ export function CustomerManagementView({
     const tabData = tabsQuery.data?.tabs ?? {}
     return [
       { key: 'all', label: 'همه', count: totalCustomers },
+      { key: 'unassigned', label: 'تعیین نشده', count: tabData['unassigned']?.total },
       { key: 'upsell_pending', label: 'در انتظار پرداخت', count: tabData['upsell_pending']?.total },
       { key: 'upsell_paid', label: 'پرداخت شده', count: tabData['upsell_paid']?.total },
       { key: 'upsell', label: 'فروش افزایشی' },
@@ -463,6 +497,7 @@ export function CustomerManagementView({
               onChange={(event) => setSearchTerm(event.target.value)}
             />
           </div>
+          {toolbarExtras}
           <Button variant="outline" className="gap-2" disabled>
             <Filter className="h-4 w-4" />
             فیلتر پیشرفته (به‌زودی)
@@ -546,6 +581,8 @@ export function CustomerManagementView({
                   statusUpdatingId={selectedStatusUpdatingId}
                   normalSmsCustomerId={normalSmsCustomerId}
                   upsellCustomerId={upsellCustomerId}
+                  showCallButton={showCallButton}
+                  onShowFormInfo={onShowFormInfo}
                 />
               ))}
             </div>
@@ -626,6 +663,8 @@ interface CustomerRowProps {
   statusUpdatingId: number | null
   normalSmsCustomerId: number | null
   upsellCustomerId: number | null
+  showCallButton?: boolean
+  onShowFormInfo?: (customer: Customer) => void
 }
 
 function CustomerRow({
@@ -640,6 +679,8 @@ function CustomerRow({
   statusUpdatingId,
   normalSmsCustomerId,
   upsellCustomerId,
+  showCallButton,
+  onShowFormInfo,
 }: CustomerRowProps) {
   const [selectedStatus, setSelectedStatus] = useState<CustomerStatus>(customer.status)
   const [selectedField, setSelectedField] = useState<string>(customer.upsell_field_key ?? '')
@@ -649,10 +690,32 @@ function CustomerRow({
   const isUpsellSubmitting = upsellCustomerId === customer.id
   const rowDisabled = disabled || isStatusUpdating
 
+  const sanitizedPhone = customer.phone ? customer.phone.replace(/[^+\d]/g, '') : ''
   const showUpsellControls = selectedStatus === 'upsell'
   const showNoteButton = typeof onOpenNoteDialog === 'function'
   const showAssignSupervisorButton = typeof onOpenAssignSupervisor === 'function'
   const showAssignAgentButton = typeof onOpenAssignAgent === 'function'
+  const showCallAction = Boolean(showCallButton && sanitizedPhone)
+  const showFormInfoButton = typeof onShowFormInfo === 'function'
+
+  const scheduleTime = customer.form_schedule?.time ?? ''
+  const rawScheduleDate = customer.form_schedule?.date ?? ''
+  const scheduleDate = useMemo(() => {
+    if (!rawScheduleDate) {
+      return ''
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawScheduleDate)) {
+      return formatJalaliDate(rawScheduleDate)
+    }
+    return rawScheduleDate
+  }, [rawScheduleDate])
+  const scheduleDate = customer.form_schedule?.date ?? ''
+  const callLabel = scheduleTime
+    ? `تماس در ساعت ${scheduleTime}${scheduleDate ? ` (${scheduleDate})` : ''}`
+    : scheduleDate
+      ? `تماس در تاریخ ${scheduleDate}`
+      : 'تماس'
+  const sanitizedPhone = customer.phone ? customer.phone.replace(/\s+/g, '') : ''
 
   const {
     data: cardFields = [],
@@ -870,8 +933,31 @@ function CustomerRow({
         )}
       </div>
 
-      {(showNoteButton || showAssignSupervisorButton || showAssignAgentButton) && (
+      {(showNoteButton || showAssignSupervisorButton || showAssignAgentButton || showCallAction || showFormInfoButton) && (
         <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {showCallAction && customer.phone && (
+            <Button
+              size="sm"
+              asChild
+              className="bg-emerald-500 text-white hover:bg-emerald-600"
+            >
+              <a href={`tel://${sanitizedPhone}`} className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                <span>{callLabel}</span>
+              </a>
+            </Button>
+          )}
+          {showFormInfoButton && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onShowFormInfo?.(customer)}
+              disabled={disabled}
+            >
+              <Info className="h-4 w-4" />
+              <span className="ml-2">اطلاعات فرم</span>
+            </Button>
+          )}
           {showNoteButton && (
             <Button
               variant="outline"
