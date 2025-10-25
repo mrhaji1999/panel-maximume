@@ -475,6 +475,51 @@ class StatusManager {
                 $sms->send($customer_id, $phone, $body_id, [$random_code], get_current_user_id());
             }
         }
+
+        $card_id = (int) get_user_meta($customer_id, 'ucb_customer_card_id', true);
+        $store_url = $card_id > 0 ? get_post_meta($card_id, 'store_url', true) : '';
+        if ($card_id > 0 && !empty($store_url)) {
+            $user = get_userdata($customer_id);
+            if ($user) {
+                $code_type = get_post_meta($card_id, 'code_type', true);
+                if (!in_array($code_type, ['wallet', 'coupon'], true)) {
+                    $code_type = 'coupon';
+                }
+                $amount = (float) get_post_meta($card_id, 'wallet_amount', true);
+                $currency = get_option('ucb_bridge_currency', get_option('woocommerce_currency', 'IRR'));
+
+                if ($amount > 0) {
+                    $dispatch_service = new DispatchService();
+                    $payload = [
+                        'code' => $random_code,
+                        'type' => $code_type,
+                        'amount' => $amount,
+                        'currency' => $currency,
+                        'user_email' => $user->user_email,
+                        'user_id' => $customer_id,
+                        'card_post_id' => $card_id,
+                        'store_url' => $store_url,
+                        'meta' => [
+                            'card_title' => get_the_title($card_id),
+                            'customer_phone' => $phone,
+                        ],
+                    ];
+
+                    $result = $dispatch_service->dispatch($payload, [
+                        'idempotency_key' => $random_code,
+                    ]);
+
+                    if (is_wp_error($result)) {
+                        \UCB\Logger::log('error', 'Dispatch enqueue failed', [
+                            'customer_id' => $customer_id,
+                            'card_id' => $card_id,
+                            'message' => $result->get_error_message(),
+                            'code' => $result->get_error_code(),
+                        ]);
+                    }
+                }
+            }
+        }
     }
     
     /**

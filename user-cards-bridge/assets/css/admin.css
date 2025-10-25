@@ -185,6 +185,18 @@
     flex: 1;
 }
 
+.ucb-bridge-repeater .ucb-bridge-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.ucb-bridge-repeater .ucb-bridge-row input.small-text {
+    width: 90px;
+}
+
 /* API Documentation */
 .ucb-api-docs {
     line-height: 1.6;
@@ -198,6 +210,20 @@
 .ucb-api-docs h4 {
     color: #50575e;
     margin: 15px 0 8px 0;
+}
+
+.ucb-filters {
+    margin: 20px 0;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.ucb-filters input[type="search"],
+.ucb-filters input[type="url"],
+.ucb-filters select {
+    min-width: 200px;
 }
 
 .ucb-api-docs ul {
