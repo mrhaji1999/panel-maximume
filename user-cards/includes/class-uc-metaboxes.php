@@ -46,7 +46,7 @@ class UC_Metaboxes {
 
         echo '<hr />';
         echo '<div class="uc-admin-row">';
-        echo '<label for="uc_wallet_amount"><strong>' . esc_html__('Wallet amount (IRR)', 'user-cards') . '</strong></label>';
+        echo '<label for="uc_wallet_amount"><strong>' . esc_html__('مبلغ کیف پول', 'user-cards') . '</strong></label>';
         printf(
             '<input id="uc_wallet_amount" type="number" step="0.01" min="0" name="uc_wallet_amount" value="%s" class="uc-admin-select" />',
             esc_attr($wallet_amount)
@@ -54,7 +54,7 @@ class UC_Metaboxes {
         echo '</div>';
 
         echo '<div class="uc-admin-row">';
-        echo '<label><strong>' . esc_html__('Code type', 'user-cards') . '</strong></label>';
+        echo '<label><strong>' . esc_html__('نوع کد', 'user-cards') . '</strong></label>';
         foreach ([
             'coupon' => __('کد تخفیف', 'user-cards'),
             'wallet' => __('کیف پول', 'user-cards'),
@@ -69,13 +69,13 @@ class UC_Metaboxes {
         echo '</div>';
 
         echo '<div class="uc-admin-row">';
-        echo '<label for="uc_store_url"><strong>' . esc_html__('Store URL', 'user-cards') . '</strong></label>';
+        echo '<label for="uc_store_url"><strong>' . esc_html__('لینک فروشگاه مقصد', 'user-cards') . '</strong></label>';
         printf(
-            '<input id="uc_store_url" type="url" name="uc_store_url" value="%s" class="widefat" placeholder="https://example.com" />',
+            '<input id="uc_store_url" type="url" name="uc_store_url" value="%s" class="widefat" placeholder="https://shop.example.com" />',
             esc_attr($store_url)
         );
         echo '</div>';
-        echo '<p class="uc-note">' . esc_html__('Store URL must be a valid HTTPS address for the destination WooCommerce shop.', 'user-cards') . '</p>';
+        echo '<p class="uc-note">' . esc_html__('آدرس فروشگاه باید یک لینک معتبر HTTPS برای فروشگاه ووکامرس مقصد باشد.', 'user-cards') . '</p>';
     }
 
     public static function render_schedule_box($post) {

@@ -132,7 +132,8 @@ class UC_Post_Types {
         return $sanitized;
     }
 
-    public static function meta_auth_callback() {
-        return current_user_can('edit_posts');
+    public static function meta_auth_callback($allowed, $meta_key, $post_id, $user_id = 0, $cap = '', $caps = []) {
+        unset($allowed, $meta_key, $user_id, $cap, $caps);
+        return current_user_can('edit_post', $post_id);
     }
 }
