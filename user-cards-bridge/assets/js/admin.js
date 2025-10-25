@@ -78,6 +78,31 @@
                 $(this).parent().remove();
             });
 
+            // Add API key row
+            $('#add-bridge-key').on('click', function() {
+                var container = $('#ucb-bridge-keys');
+                var index = container.find('.ucb-bridge-row').length;
+                var template = $('#ucb-bridge-key-template').html();
+                if (template) {
+                    container.append(template.replace(/__index__/g, index));
+                }
+            });
+
+            // Add destination row
+            $('#add-bridge-destination').on('click', function() {
+                var container = $('#ucb-bridge-destinations');
+                var index = container.find('.ucb-bridge-row').length;
+                var template = $('#ucb-bridge-destination-template').html();
+                if (template) {
+                    container.append(template.replace(/__index__/g, index));
+                }
+            });
+
+            // Remove dynamic rows
+            $(document).on('click', '.remove-bridge-row', function() {
+                $(this).closest('.ucb-bridge-row').remove();
+            });
+
             // Generate webhook secret
             $('#generate-webhook-secret').on('click', function() {
                 var secret = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
