@@ -65,7 +65,7 @@ class FormSubmissionService {
         ]);
         
         // Set initial status
-        $this->set_customer_status($customer_id, 'no_answer', 'Form submitted');
+        $this->set_customer_status($customer_id, 'unassigned', 'Form submitted');
         
         // Notify supervisor (if notification system is available)
         $this->notify_supervisor($supervisor_id, $customer_id, $card_id);
@@ -73,7 +73,7 @@ class FormSubmissionService {
         return [
             'customer_id' => $customer_id,
             'supervisor_id' => $supervisor_id,
-            'status' => 'no_answer'
+            'status' => 'unassigned'
         ];
     }
     
@@ -119,7 +119,7 @@ class FormSubmissionService {
             'card_id' => $card_id,
             'supervisor_id' => $supervisor_id,
             'form_data' => $form_data,
-            'status' => 'no_answer',
+            'status' => 'unassigned',
             'created_at' => current_time('mysql')
         ];
     }
