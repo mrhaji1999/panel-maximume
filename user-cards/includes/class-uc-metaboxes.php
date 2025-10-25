@@ -12,12 +12,6 @@ class UC_Metaboxes {
     public static function render_card_box($post) {
         wp_nonce_field('uc_card_save', 'uc_card_nonce');
         $related_post_id = (int) get_post_meta($post->ID, '_uc_related_post_id', true);
-        $wallet_amount = (float) get_post_meta($post->ID, 'wallet_amount', true);
-        $code_type = get_post_meta($post->ID, 'code_type', true);
-        if (!in_array($code_type, ['wallet', 'coupon'], true)) {
-            $code_type = 'coupon';
-        }
-        $store_url = get_post_meta($post->ID, 'store_url', true);
         $related_post_type = $related_post_id ? get_post_type($related_post_id) : 'post';
         $public_types = get_post_types(['public' => true], 'objects');
         unset($public_types['attachment']);
@@ -43,39 +37,6 @@ class UC_Metaboxes {
         echo '</select>';
         echo '</div>';
         echo '<p class="uc-note">' . esc_html__('Select the post type, then the specific post to associate with this card.', 'user-cards') . '</p>';
-
-        echo '<hr />';
-        echo '<div class="uc-admin-row">';
-        echo '<label for="uc_wallet_amount"><strong>' . esc_html__('مبلغ کیف پول', 'user-cards') . '</strong></label>';
-        printf(
-            '<input id="uc_wallet_amount" type="number" step="0.01" min="0" name="uc_wallet_amount" value="%s" class="uc-admin-select" />',
-            esc_attr($wallet_amount)
-        );
-        echo '</div>';
-
-        echo '<div class="uc-admin-row">';
-        echo '<label><strong>' . esc_html__('نوع کد', 'user-cards') . '</strong></label>';
-        foreach ([
-            'coupon' => __('کد تخفیف', 'user-cards'),
-            'wallet' => __('کیف پول', 'user-cards'),
-        ] as $value => $label) {
-            printf(
-                '<label style="margin-inline-end:15px"><input type="radio" name="uc_code_type" value="%1$s" %2$s /> %3$s</label>',
-                esc_attr($value),
-                checked($code_type, $value, false),
-                esc_html($label)
-            );
-        }
-        echo '</div>';
-
-        echo '<div class="uc-admin-row">';
-        echo '<label for="uc_store_url"><strong>' . esc_html__('لینک فروشگاه مقصد', 'user-cards') . '</strong></label>';
-        printf(
-            '<input id="uc_store_url" type="url" name="uc_store_url" value="%s" class="widefat" placeholder="https://shop.example.com" />',
-            esc_attr($store_url)
-        );
-        echo '</div>';
-        echo '<p class="uc-note">' . esc_html__('آدرس فروشگاه باید یک لینک معتبر HTTPS برای فروشگاه ووکامرس مقصد باشد.', 'user-cards') . '</p>';
     }
 
     public static function render_schedule_box($post) {
@@ -391,32 +352,6 @@ class UC_Metaboxes {
                 $rows[] = ['label' => $label, 'amount' => $amount];
             }
             update_post_meta($post_id, '_uc_pricings', $rows);
-        }
-
-        // Wallet integration meta fields
-        if (isset($_POST['uc_card_nonce']) && wp_verify_nonce($_POST['uc_card_nonce'], 'uc_card_save')) {
-            if (isset($_POST['uc_wallet_amount'])) {
-                $amount = UC_Post_Types::sanitize_wallet_amount($_POST['uc_wallet_amount']);
-                if ($amount > 0) {
-                    update_post_meta($post_id, 'wallet_amount', $amount);
-                } else {
-                    delete_post_meta($post_id, 'wallet_amount');
-                }
-            }
-
-            if (isset($_POST['uc_code_type'])) {
-                $type = UC_Post_Types::sanitize_code_type($_POST['uc_code_type']);
-                update_post_meta($post_id, 'code_type', $type);
-            }
-
-            if (isset($_POST['uc_store_url'])) {
-                $store_url = UC_Post_Types::sanitize_store_url($_POST['uc_store_url']);
-                if ($store_url !== '') {
-                    update_post_meta($post_id, 'store_url', $store_url);
-                } else {
-                    delete_post_meta($post_id, 'store_url');
-                }
-            }
         }
     }
 

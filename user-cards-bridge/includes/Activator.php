@@ -133,45 +133,14 @@ class Activator {
             KEY expires_at (expires_at)
         ) $charset_collate;";
         
-        $table_dispatch = $wpdb->prefix . 'cb_dispatch_log';
-        $sql_dispatch = "CREATE TABLE $table_dispatch (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            dispatch_uuid varchar(100) NOT NULL,
-            code varchar(191) NOT NULL,
-            card_id bigint(20) NOT NULL,
-            user_id bigint(20) NOT NULL,
-            user_email varchar(191) NOT NULL,
-            store_url varchar(255) NOT NULL,
-            type varchar(20) NOT NULL,
-            amount decimal(20,6) NOT NULL DEFAULT 0,
-            currency varchar(10) NOT NULL,
-            payload longtext NULL,
-            response_body longtext NULL,
-            last_error text NULL,
-            last_response_code int(11) DEFAULT NULL,
-            status varchar(20) NOT NULL DEFAULT 'pending',
-            attempts int(11) NOT NULL DEFAULT 0,
-            idempotency_key varchar(191) DEFAULT NULL,
-            expires_at datetime DEFAULT NULL,
-            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY dispatch_uuid (dispatch_uuid),
-            KEY code (code),
-            KEY store_url (store_url(191)),
-            KEY status (status),
-            KEY idempotency (idempotency_key)
-        ) $charset_collate;";
-
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-
+        
         dbDelta($sql_capacity);
         dbDelta($sql_reservations);
         dbDelta($sql_status_logs);
         dbDelta($sql_sms_logs);
         dbDelta($sql_logs);
         dbDelta($sql_payment_tokens);
-        dbDelta($sql_dispatch);
 
         // Ensure schema upgrades also run during activation.
         ReservationDateMigration::migrate();
@@ -194,11 +163,6 @@ class Activator {
             'ucb_log_retention_days' => 30,
             'ucb_customer_statuses' => (new Services\StatusManager())->get_default_statuses(),
             'ucb_webhook_secret' => '',
-            'ucb_bridge_api_keys' => [],
-            'ucb_bridge_destinations' => [],
-            'ucb_bridge_currency' => get_option('woocommerce_currency', 'IRR'),
-            'ucb_bridge_retry_limit' => 10,
-            'ucb_bridge_rate_limit' => ['requests' => 120, 'interval' => 300],
         ];
         
         foreach ($default_options as $option => $value) {

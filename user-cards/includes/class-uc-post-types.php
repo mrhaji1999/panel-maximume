@@ -36,30 +36,6 @@ class UC_Post_Types {
                 'sanitize_callback' => ['UC_Post_Types', 'sanitize_pricings'],
                 'auth_callback' => '__return_true',
             ]);
-
-            register_post_meta('uc_card', 'wallet_amount', [
-                'single' => true,
-                'type' => 'number',
-                'show_in_rest' => true,
-                'sanitize_callback' => ['UC_Post_Types', 'sanitize_wallet_amount'],
-                'auth_callback' => ['UC_Post_Types', 'meta_auth_callback'],
-            ]);
-
-            register_post_meta('uc_card', 'code_type', [
-                'single' => true,
-                'type' => 'string',
-                'show_in_rest' => true,
-                'sanitize_callback' => ['UC_Post_Types', 'sanitize_code_type'],
-                'auth_callback' => ['UC_Post_Types', 'meta_auth_callback'],
-            ]);
-
-            register_post_meta('uc_card', 'store_url', [
-                'single' => true,
-                'type' => 'string',
-                'show_in_rest' => true,
-                'sanitize_callback' => ['UC_Post_Types', 'sanitize_store_url'],
-                'auth_callback' => ['UC_Post_Types', 'meta_auth_callback'],
-            ]);
         }
 
         // Taxonomy: Card Collections (مجموعه کارت‌ها)
@@ -108,32 +84,5 @@ class UC_Post_Types {
             }
         }
         return $out;
-    }
-
-    public static function sanitize_wallet_amount($value) {
-        $value = is_numeric($value) ? (float) $value : 0.0;
-        return max(0, $value);
-    }
-
-    public static function sanitize_code_type($value) {
-        $value = is_string($value) ? strtolower($value) : '';
-        return in_array($value, ['wallet', 'coupon'], true) ? $value : 'coupon';
-    }
-
-    public static function sanitize_store_url($value) {
-        $value = is_string($value) ? trim($value) : '';
-        if ($value === '') {
-            return '';
-        }
-        $sanitized = esc_url_raw($value);
-        if (empty($sanitized) || strpos($sanitized, 'https://') !== 0) {
-            return '';
-        }
-        return $sanitized;
-    }
-
-    public static function meta_auth_callback($allowed, $meta_key, $post_id, $user_id = 0, $cap = '', $caps = []) {
-        unset($allowed, $meta_key, $user_id, $cap, $caps);
-        return current_user_can('edit_post', $post_id);
     }
 }

@@ -32,7 +32,6 @@ class Uninstaller {
             $wpdb->prefix . 'ucb_status_logs',
             $wpdb->prefix . 'ucb_sms_logs',
             $wpdb->prefix . 'ucb_payment_tokens',
-            $wpdb->prefix . 'cb_dispatch_log',
         ];
         
         foreach ($tables as $table) {
@@ -58,11 +57,6 @@ class Uninstaller {
             'ucb_log_retention_days',
             'ucb_customer_statuses',
             'ucb_webhook_secret',
-            'ucb_bridge_api_keys',
-            'ucb_bridge_destinations',
-            'ucb_bridge_currency',
-            'ucb_bridge_retry_limit',
-            'ucb_bridge_rate_limit',
         ];
         
         foreach ($options as $option) {

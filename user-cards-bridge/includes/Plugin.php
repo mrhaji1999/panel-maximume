@@ -65,7 +65,6 @@ class Plugin {
         new AjaxHandlers();
         new SMS\PayamakPanel();
         new Services\FormSyncService();
-        new Services\DispatchService();
         
         // Initialize JWT authentication
         \UCB\JWT\JWTAuth::init();
@@ -90,7 +89,6 @@ class Plugin {
         new API\Forms();
         new API\Schedule();
         new API\Reservations();
-        new API\Codes();
         new API\Upsell();
         new API\SMS();
         new API\Stats();
@@ -125,15 +123,6 @@ class Plugin {
             'user-cards-bridge-logs',
             [$this, 'logs_page']
         );
-
-        add_submenu_page(
-            'user-cards-bridge',
-            __('Dispatches', UCB_TEXT_DOMAIN),
-            __('Dispatches', UCB_TEXT_DOMAIN),
-            'manage_options',
-            'user-cards-bridge-dispatches',
-            [$this, 'dispatches_page']
-        );
     }
     
     public function admin_page() {
@@ -146,10 +135,6 @@ class Plugin {
     
     public function logs_page() {
         include UCB_PLUGIN_DIR . 'templates/admin-logs.php';
-    }
-
-    public function dispatches_page() {
-        include UCB_PLUGIN_DIR . 'templates/admin-dispatches.php';
     }
     
     public function enqueue_admin_scripts($hook) {

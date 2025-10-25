@@ -30,66 +30,7 @@ if (isset($_POST['submit']) && wp_verify_nonce($_POST['ucb_settings_nonce'], 'uc
     if (!empty($_POST['ucb_webhook_secret'])) {
         update_option('ucb_webhook_secret', sanitize_text_field($_POST['ucb_webhook_secret']));
     }
-
-    // Bridge API keys
-    $keys_input = isset($_POST['ucb_bridge_keys']) ? (array) $_POST['ucb_bridge_keys'] : [];
-    $sanitized_keys = [];
-    foreach ($keys_input as $row) {
-        if (!is_array($row)) {
-            continue;
-        }
-        $key = isset($row['key']) ? sanitize_text_field($row['key']) : '';
-        $secret = isset($row['secret']) ? sanitize_text_field($row['secret']) : '';
-        $label = isset($row['label']) ? sanitize_text_field($row['label']) : '';
-        if ($key === '' || $secret === '') {
-            continue;
-        }
-        $sanitized_keys[] = [
-            'label' => $label,
-            'key'   => $key,
-            'secret'=> $secret,
-        ];
-    }
-    update_option('ucb_bridge_api_keys', $sanitized_keys);
-
-    // Bridge destinations
-    $destinations_input = isset($_POST['ucb_bridge_destinations']) ? (array) $_POST['ucb_bridge_destinations'] : [];
-    $sanitized_destinations = [];
-    foreach ($destinations_input as $row) {
-        if (!is_array($row)) {
-            continue;
-        }
-        $store_url = isset($row['store_url']) ? esc_url_raw($row['store_url']) : '';
-        $key = isset($row['key']) ? sanitize_text_field($row['key']) : '';
-        $secret = isset($row['secret']) ? sanitize_text_field($row['secret']) : '';
-        $timeout = isset($row['timeout']) ? (float) $row['timeout'] : 20.0;
-
-        if ($store_url === '' || strpos($store_url, 'https://') !== 0 || $key === '' || $secret === '') {
-            continue;
-        }
-
-        $sanitized_destinations[] = [
-            'store_url' => untrailingslashit($store_url),
-            'key'       => $key,
-            'secret'    => $secret,
-            'timeout'   => max(5, $timeout),
-        ];
-    }
-    update_option('ucb_bridge_destinations', $sanitized_destinations);
-
-    $bridge_currency = sanitize_text_field($_POST['ucb_bridge_currency'] ?? get_option('ucb_bridge_currency', 'IRR'));
-    update_option('ucb_bridge_currency', strtoupper($bridge_currency));
-
-    $retry_limit = max(1, (int) ($_POST['ucb_bridge_retry_limit'] ?? get_option('ucb_bridge_retry_limit', 10)));
-    update_option('ucb_bridge_retry_limit', $retry_limit);
-
-    $rate_requests = max(0, (int) ($_POST['ucb_bridge_rate_requests'] ?? 120));
-    $rate_interval = max(1, (int) ($_POST['ucb_bridge_rate_interval'] ?? 300));
-    update_option('ucb_bridge_rate_limit', [
-        'requests' => $rate_requests,
-        'interval' => $rate_interval,
-    ]);
-
+    
     echo '<div class="notice notice-success"><p>' . __('Settings saved successfully!', UCB_TEXT_DOMAIN) . '</p></div>';
 }
 
@@ -102,20 +43,6 @@ $cors_origins = array_values(array_filter(array_map(['\\UCB\\Security', 'sanitiz
 $payment_token_expiry = get_option('ucb_payment_token_expiry', 24);
 $log_retention_days = get_option('ucb_log_retention_days', 30);
 $webhook_secret = get_option('ucb_webhook_secret', '');
-$bridge_api_keys = get_option('ucb_bridge_api_keys', []);
-if (!is_array($bridge_api_keys)) {
-    $bridge_api_keys = [];
-}
-$bridge_destinations = get_option('ucb_bridge_destinations', []);
-if (!is_array($bridge_destinations)) {
-    $bridge_destinations = [];
-}
-$bridge_currency = get_option('ucb_bridge_currency', get_option('woocommerce_currency', 'IRR'));
-$bridge_retry_limit = (int) get_option('ucb_bridge_retry_limit', 10);
-$bridge_rate_limit = get_option('ucb_bridge_rate_limit', ['requests' => 120, 'interval' => 300]);
-if (!is_array($bridge_rate_limit)) {
-    $bridge_rate_limit = ['requests' => 120, 'interval' => 300];
-}
 ?>
 
 <div class="wrap">
@@ -209,111 +136,12 @@ if (!is_array($bridge_rate_limit)) {
                             <label for="ucb_log_retention_days"><?php _e('Log Retention (days)', UCB_TEXT_DOMAIN); ?></label>
                         </th>
                         <td>
-                            <input type="number" id="ucb_log_retention_days" name="ucb_log_retention_days"
+                            <input type="number" id="ucb_log_retention_days" name="ucb_log_retention_days" 
                                    value="<?php echo esc_attr($log_retention_days); ?>" min="1" max="365" class="small-text">
                             <p class="description"><?php _e('How long to keep logs (1-365 days).', UCB_TEXT_DOMAIN); ?></p>
                         </td>
                     </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ucb_bridge_currency"><?php _e('Bridge Currency', UCB_TEXT_DOMAIN); ?></label>
-                        </th>
-                        <td>
-                            <input type="text" id="ucb_bridge_currency" name="ucb_bridge_currency"
-                                   value="<?php echo esc_attr($bridge_currency); ?>" class="regular-text" maxlength="10">
-                            <p class="description"><?php _e('Default currency code for dispatched amounts (e.g. IRR).', UCB_TEXT_DOMAIN); ?></p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ucb_bridge_retry_limit"><?php _e('Max Retry Attempts', UCB_TEXT_DOMAIN); ?></label>
-                        </th>
-                        <td>
-                            <input type="number" id="ucb_bridge_retry_limit" name="ucb_bridge_retry_limit"
-                                   value="<?php echo esc_attr($bridge_retry_limit); ?>" min="1" max="20" class="small-text">
-                            <p class="description"><?php _e('Maximum number of retries for failed dispatches.', UCB_TEXT_DOMAIN); ?></p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ucb_bridge_rate_requests"><?php _e('Rate Limit (requests / interval)', UCB_TEXT_DOMAIN); ?></label>
-                        </th>
-                        <td>
-                            <input type="number" id="ucb_bridge_rate_requests" name="ucb_bridge_rate_requests"
-                                   value="<?php echo esc_attr($bridge_rate_limit['requests'] ?? 120); ?>" min="0" class="small-text">
-                            <span> / </span>
-                            <input type="number" id="ucb_bridge_rate_interval" name="ucb_bridge_rate_interval"
-                                   value="<?php echo esc_attr($bridge_rate_limit['interval'] ?? 300); ?>" min="1" class="small-text"> <?php _e('seconds', UCB_TEXT_DOMAIN); ?>
-                            <p class="description"><?php _e('Limit incoming dispatch API calls per API key.', UCB_TEXT_DOMAIN); ?></p>
-                        </td>
-                    </tr>
                 </table>
-
-                <h3><?php _e('Bridge API Keys', UCB_TEXT_DOMAIN); ?></h3>
-                <p class="description"><?php _e('Configure API keys allowed to call the dispatch endpoint.', UCB_TEXT_DOMAIN); ?></p>
-                <div id="ucb-bridge-keys" class="ucb-bridge-repeater">
-                    <?php if (empty($bridge_api_keys)): ?>
-                        <div class="ucb-bridge-row">
-                            <input type="text" name="ucb_bridge_keys[0][label]" class="regular-text" placeholder="<?php esc_attr_e('Label', UCB_TEXT_DOMAIN); ?>">
-                            <input type="text" name="ucb_bridge_keys[0][key]" class="regular-text" placeholder="<?php esc_attr_e('Public Key', UCB_TEXT_DOMAIN); ?>">
-                            <input type="text" name="ucb_bridge_keys[0][secret]" class="regular-text" placeholder="<?php esc_attr_e('Secret Key', UCB_TEXT_DOMAIN); ?>">
-                            <button type="button" class="button remove-bridge-row"><?php _e('Remove', UCB_TEXT_DOMAIN); ?></button>
-                        </div>
-                    <?php else: ?>
-                        <?php foreach ($bridge_api_keys as $index => $key_row): ?>
-                            <div class="ucb-bridge-row">
-                                <input type="text" name="ucb_bridge_keys[<?php echo esc_attr($index); ?>][label]" class="regular-text" placeholder="<?php esc_attr_e('Label', UCB_TEXT_DOMAIN); ?>" value="<?php echo esc_attr($key_row['label'] ?? ''); ?>">
-                                <input type="text" name="ucb_bridge_keys[<?php echo esc_attr($index); ?>][key]" class="regular-text" placeholder="<?php esc_attr_e('Public Key', UCB_TEXT_DOMAIN); ?>" value="<?php echo esc_attr($key_row['key'] ?? ''); ?>">
-                                <input type="text" name="ucb_bridge_keys[<?php echo esc_attr($index); ?>][secret]" class="regular-text" placeholder="<?php esc_attr_e('Secret Key', UCB_TEXT_DOMAIN); ?>" value="<?php echo esc_attr($key_row['secret'] ?? ''); ?>">
-                                <button type="button" class="button remove-bridge-row"><?php _e('Remove', UCB_TEXT_DOMAIN); ?></button>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </div>
-                <button type="button" id="add-bridge-key" class="button"><?php _e('Add API Key', UCB_TEXT_DOMAIN); ?></button>
-                <template id="ucb-bridge-key-template">
-                    <div class="ucb-bridge-row">
-                        <input type="text" name="ucb_bridge_keys[__index__][label]" class="regular-text" placeholder="<?php esc_attr_e('Label', UCB_TEXT_DOMAIN); ?>">
-                        <input type="text" name="ucb_bridge_keys[__index__][key]" class="regular-text" placeholder="<?php esc_attr_e('Public Key', UCB_TEXT_DOMAIN); ?>">
-                        <input type="text" name="ucb_bridge_keys[__index__][secret]" class="regular-text" placeholder="<?php esc_attr_e('Secret Key', UCB_TEXT_DOMAIN); ?>">
-                        <button type="button" class="button remove-bridge-row"><?php _e('Remove', UCB_TEXT_DOMAIN); ?></button>
-                    </div>
-                </template>
-
-                <h3 style="margin-top:30px;">&nbsp;</h3>
-                <h3><?php _e('Destination Stores', UCB_TEXT_DOMAIN); ?></h3>
-                <p class="description"><?php _e('Define destination WooCommerce stores and their credentials.', UCB_TEXT_DOMAIN); ?></p>
-                <div id="ucb-bridge-destinations" class="ucb-bridge-repeater">
-                    <?php if (empty($bridge_destinations)): ?>
-                        <div class="ucb-bridge-row">
-                            <input type="url" name="ucb_bridge_destinations[0][store_url]" class="regular-text" placeholder="https://store.example.com">
-                            <input type="text" name="ucb_bridge_destinations[0][key]" class="regular-text" placeholder="<?php esc_attr_e('Destination Key', UCB_TEXT_DOMAIN); ?>">
-                            <input type="text" name="ucb_bridge_destinations[0][secret]" class="regular-text" placeholder="<?php esc_attr_e('Destination Secret', UCB_TEXT_DOMAIN); ?>">
-                            <input type="number" name="ucb_bridge_destinations[0][timeout]" class="small-text" min="5" value="20"> <?php _e('Timeout (seconds)', UCB_TEXT_DOMAIN); ?>
-                            <button type="button" class="button remove-bridge-row"><?php _e('Remove', UCB_TEXT_DOMAIN); ?></button>
-                        </div>
-                    <?php else: ?>
-                        <?php foreach ($bridge_destinations as $index => $destination_row): ?>
-                            <div class="ucb-bridge-row">
-                                <input type="url" name="ucb_bridge_destinations[<?php echo esc_attr($index); ?>][store_url]" class="regular-text" placeholder="https://store.example.com" value="<?php echo esc_attr($destination_row['store_url'] ?? ''); ?>">
-                                <input type="text" name="ucb_bridge_destinations[<?php echo esc_attr($index); ?>][key]" class="regular-text" placeholder="<?php esc_attr_e('Destination Key', UCB_TEXT_DOMAIN); ?>" value="<?php echo esc_attr($destination_row['key'] ?? ''); ?>">
-                                <input type="text" name="ucb_bridge_destinations[<?php echo esc_attr($index); ?>][secret]" class="regular-text" placeholder="<?php esc_attr_e('Destination Secret', UCB_TEXT_DOMAIN); ?>" value="<?php echo esc_attr($destination_row['secret'] ?? ''); ?>">
-                                <input type="number" name="ucb_bridge_destinations[<?php echo esc_attr($index); ?>][timeout]" class="small-text" min="5" value="<?php echo esc_attr($destination_row['timeout'] ?? 20); ?>"> <?php _e('Timeout (seconds)', UCB_TEXT_DOMAIN); ?>
-                                <button type="button" class="button remove-bridge-row"><?php _e('Remove', UCB_TEXT_DOMAIN); ?></button>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </div>
-                <button type="button" id="add-bridge-destination" class="button"><?php _e('Add Destination', UCB_TEXT_DOMAIN); ?></button>
-                <template id="ucb-bridge-destination-template">
-                    <div class="ucb-bridge-row">
-                        <input type="url" name="ucb_bridge_destinations[__index__][store_url]" class="regular-text" placeholder="https://store.example.com">
-                        <input type="text" name="ucb_bridge_destinations[__index__][key]" class="regular-text" placeholder="<?php esc_attr_e('Destination Key', UCB_TEXT_DOMAIN); ?>">
-                        <input type="text" name="ucb_bridge_destinations[__index__][secret]" class="regular-text" placeholder="<?php esc_attr_e('Destination Secret', UCB_TEXT_DOMAIN); ?>">
-                        <input type="number" name="ucb_bridge_destinations[__index__][timeout]" class="small-text" min="5" value="20"> <?php _e('Timeout (seconds)', UCB_TEXT_DOMAIN); ?>
-                        <button type="button" class="button remove-bridge-row"><?php _e('Remove', UCB_TEXT_DOMAIN); ?></button>
-                    </div>
-                </template>
             </div>
             
             <!-- Security Settings Tab -->

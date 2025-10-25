@@ -12,7 +12,6 @@ class AjaxHandlers {
         add_action('wp_ajax_ucb_save_settings', [$this, 'save_settings']);
         add_action('wp_ajax_ucb_get_statistics', [$this, 'get_statistics']);
         add_action('wp_ajax_ucb_get_recent_activity', [$this, 'get_recent_activity']);
-        add_action('wp_ajax_ucb_dispatch_retry', [$this, 'retry_dispatch']);
     }
     
     /**
@@ -219,34 +218,6 @@ class AjaxHandlers {
         
         wp_send_json_success([
             'logs' => $logs['logs'],
-        ]);
-    }
-
-    public function retry_dispatch() {
-        check_ajax_referer('ucb_admin_nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_die(__('You do not have permission to perform this action.', UCB_TEXT_DOMAIN));
-        }
-
-        $log_id = (int) ($_POST['log_id'] ?? 0);
-        if ($log_id <= 0) {
-            wp_send_json_error(['message' => __('Invalid dispatch identifier.', UCB_TEXT_DOMAIN)]);
-        }
-
-        $service = new Services\DispatchService();
-        $result = $service->process_retry($log_id);
-
-        if (is_wp_error($result)) {
-            wp_send_json_error([
-                'message' => $result->get_error_message(),
-                'code'    => $result->get_error_code(),
-            ]);
-        }
-
-        wp_send_json_success([
-            'message' => __('Dispatch retry triggered.', UCB_TEXT_DOMAIN),
-            'result'  => $result,
         ]);
     }
 }
