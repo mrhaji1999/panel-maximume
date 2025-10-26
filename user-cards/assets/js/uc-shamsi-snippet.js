@@ -106,7 +106,26 @@
       return toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     }
 
-    return { toJalaali: toJalaali, fromDate: fromDate, toGregorian: toGregorian, monthNames: monthNames };
+    function isLeapJalaaliYear(jy) {
+      // Algorithm derived from "Calendrical Calculations" for the Jalali calendar
+      const mod = ((jy - (jy > 0 ? 474 : 473)) % 2820) + 474;
+      return (((mod + 38) * 682) % 2816) < 682;
+    }
+
+    function getJalaaliMonthLength(jy, jm) {
+      if (jm <= 6) return 31;
+      if (jm <= 11) return 30;
+      return isLeapJalaaliYear(jy) ? 30 : 29;
+    }
+
+    return {
+      toJalaali: toJalaali,
+      fromDate: fromDate,
+      toGregorian: toGregorian,
+      monthNames: monthNames,
+      isLeapJalaaliYear: isLeapJalaaliYear,
+      getJalaaliMonthLength: getJalaaliMonthLength
+    };
   })();
 
   function formatJalaaliDate(jy, jm, jd) {
@@ -179,7 +198,7 @@
     const nextMonthDate = new Date(nextMonthParts[0], nextMonthParts[1] - 1, nextMonthParts[2]);
     nextMonthDate.setHours(0,0,0,0);
 
-    const monthLength = Math.round((nextMonthDate.getTime() - monthStart.getTime()) / (24 * 60 * 60 * 1000));
+    const monthLength = jalaali.getJalaaliMonthLength(shYear, shMonthIndex);
     const days = [];
     for (let day = 1; day <= monthLength; day++) {
       const currentParts = jalaali.toGregorian(shYear, shMonthIndex, day);
