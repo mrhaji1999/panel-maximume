@@ -49,11 +49,64 @@
       return [jy, jm + 1, jd];
     }
 
+    function toGregorian(jy, jm, jd) {
+      jy = parseInt(jy, 10);
+      jm = parseInt(jm, 10);
+      jd = parseInt(jd, 10);
+
+      jy -= 979;
+      jm -= 1;
+      jd -= 1;
+
+      let jDayNo = 365 * jy + div(jy, 33) * 8 + div((jy % 33) + 3, 4);
+      for (let i = 0; i < jm; ++i) jDayNo += jDaysInMonth[i];
+      jDayNo += jd;
+
+      let gDayNo = jDayNo + 79;
+
+      let gy = 1600 + 400 * div(gDayNo, 146097);
+      gDayNo %= 146097;
+
+      let leap = true;
+      if (gDayNo >= 36525) {
+        gDayNo--;
+        gy += 100 * div(gDayNo, 36524);
+        gDayNo %= 36524;
+
+        if (gDayNo >= 365) {
+          gDayNo++;
+        } else {
+          leap = false;
+        }
+      }
+
+      gy += 4 * div(gDayNo, 1461);
+      gDayNo %= 1461;
+
+      if (gDayNo >= 366) {
+        leap = false;
+        gDayNo--;
+        gy += div(gDayNo, 365);
+        gDayNo %= 365;
+      }
+
+      let gm;
+      for (gm = 0; gm < 11; ++gm) {
+        const monthLength = gDaysInMonth[gm] + (gm === 1 && leap ? 1 : 0);
+        if (gDayNo < monthLength) break;
+        gDayNo -= monthLength;
+      }
+
+      const gd = gDayNo + 1;
+
+      return [gy, gm + 1, gd];
+    }
+
     function fromDate(date) {
       return toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     }
 
-    return { toJalaali: toJalaali, fromDate: fromDate, monthNames: monthNames };
+    return { toJalaali: toJalaali, fromDate: fromDate, toGregorian: toGregorian, monthNames: monthNames };
   })();
 
   function formatJalaaliDate(jy, jm, jd) {
@@ -88,6 +141,54 @@
     return year + '/' + month + '/' + day;
   }
 
+  function getJalaliMonthContext(baseDate){
+    const safeDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    safeDate.setHours(0,0,0,0);
+    const headerParts = jalaali.fromDate(safeDate);
+    const shYear = headerParts[0];
+    const shMonthIndex = headerParts[1];
+    const shMonthName = jalaali.monthNames[shMonthIndex - 1] || '';
+
+    const monthStartParts = jalaali.toGregorian(shYear, shMonthIndex, 1);
+    const monthStart = new Date(monthStartParts[0], monthStartParts[1] - 1, monthStartParts[2]);
+    monthStart.setHours(0,0,0,0);
+
+    const nextMonthParts = (shMonthIndex === 12)
+      ? jalaali.toGregorian(shYear + 1, 1, 1)
+      : jalaali.toGregorian(shYear, shMonthIndex + 1, 1);
+    const nextMonthDate = new Date(nextMonthParts[0], nextMonthParts[1] - 1, nextMonthParts[2]);
+    nextMonthDate.setHours(0,0,0,0);
+
+    const days = [];
+    let iterator = new Date(monthStart.getTime());
+    while (iterator.getTime() < nextMonthDate.getTime()) {
+      const currentDay = new Date(iterator.getTime());
+      const parts = jalaali.fromDate(currentDay);
+      days.push({
+        gregorian: currentDay,
+        jalaliYear: parts[0],
+        jalaliMonth: parts[1],
+        jalaliDay: parts[2]
+      });
+      iterator.setDate(iterator.getDate() + 1);
+      iterator.setHours(0,0,0,0);
+    }
+
+    const prevMonthDate = new Date(monthStart.getTime());
+    prevMonthDate.setDate(prevMonthDate.getDate() - 1);
+    prevMonthDate.setHours(0,0,0,0);
+
+    return {
+      shYear,
+      shMonthIndex,
+      shMonthName,
+      monthStart,
+      days,
+      prevMonthDate,
+      nextMonthDate
+    };
+  }
+
   function renderShamsiCalendar(targetId, date){
     const inputField = document.getElementById(targetId);
     if (!inputField) return;
@@ -99,14 +200,11 @@
       container.appendChild(popup);
     }
 
-    const viewDate = new Date(date.getFullYear(), date.getMonth(), 1);
-    const headerParts = jalaali.fromDate(viewDate);
-    const shYear = headerParts[0];
-    const shMonthIndex = headerParts[1];
-    const shMonthName = jalaali.monthNames[shMonthIndex - 1] || '';
-    const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
-    const firstDayOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay();
-    const firstDayOffset = (firstDayOfMonth + 1) % 7; // Saturday=0
+    const viewDate = (date instanceof Date && !isNaN(date.getTime())) ? new Date(date.getTime()) : new Date();
+    viewDate.setHours(0,0,0,0);
+    const monthContext = getJalaliMonthContext(viewDate);
+    const { shYear, shMonthIndex, shMonthName, monthStart, days, prevMonthDate, nextMonthDate } = monthContext;
+    const firstDayOffset = (monthStart.getDay() + 1) % 7; // Saturday=0
     const todayGregorian = new Date();
     const todayAtMidnight = new Date(todayGregorian.getFullYear(), todayGregorian.getMonth(), todayGregorian.getDate());
 
@@ -114,18 +212,17 @@
     weekDays.forEach(d => { body += "<div class='shamsi-calendar-day-name'>"+d+"</div>"; });
     for (let i=0;i<firstDayOffset;i++) body += '<div></div>';
 
-    for (let day=1; day<=daysInMonth; day++){
-      const dayDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    days.forEach(dayEntry => {
+      const dayDate = dayEntry.gregorian;
       const isToday = dayDate.toDateString() === todayGregorian.toDateString();
-      const dayAtMidnight = new Date(viewDate.getFullYear(), viewDate.getMonth(), day).setHours(0,0,0,0);
+      const dayAtMidnight = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate()).setHours(0,0,0,0);
       const isSelectable = dayAtMidnight >= todayAtMidnight.getTime();
       let classes = 'shamsi-calendar-day';
       if (isToday) classes += ' is-today';
       if (isSelectable) classes += ' is-selectable';
-      const jalaliParts = jalaali.fromDate(dayDate);
-      const displayValue = formatJalaaliDate(jalaliParts[0], jalaliParts[1], jalaliParts[2]);
-      body += '<div class="'+classes+'" data-date="'+displayValue+'" data-gregorian="'+dayDate.toISOString()+'">'+jalaliParts[2]+'</div>';
-    }
+      const displayValue = formatJalaaliDate(dayEntry.jalaliYear, dayEntry.jalaliMonth, dayEntry.jalaliDay);
+      body += '<div class="'+classes+'" data-date="'+displayValue+'" data-gregorian="'+dayDate.toISOString()+'">'+dayEntry.jalaliDay+'</div>';
+    });
     body += '</div>';
 
     popup.innerHTML = `
@@ -141,9 +238,19 @@
     popup.querySelectorAll('.shamsi-calendar-day.is-selectable').forEach(el => {
       el.addEventListener('click', function(){
         const displayValue = this.getAttribute('data-date') || '';
+        const gregorianValue = this.getAttribute('data-gregorian') || '';
         inputField.value = displayValue;
-        inputField.setAttribute('data-gregorian', this.getAttribute('data-gregorian'));
-        try { inputField.dispatchEvent(new Event('change', { bubbles: true })); } catch(e) { var ev = document.createEvent('Event'); ev.initEvent('change', true, false); inputField.dispatchEvent(ev); }
+        inputField.setAttribute('data-gregorian', gregorianValue);
+        inputField.setAttribute('data-jalali', displayValue);
+        try {
+          inputField.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e) {
+          var ev = document.createEvent('Event');
+          ev.initEvent('change', true, false);
+          inputField.dispatchEvent(ev);
+        }
+        // Re-assert the Jalali value after change listeners have run (some convert it back to Gregorian)
+        setTimeout(function(){ inputField.value = displayValue; }, 0);
         popup.style.display = 'none';
       });
     });
@@ -153,15 +260,13 @@
 
     if (prevNav) {
       prevNav.addEventListener('click', () => {
-        const prevDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
-        renderShamsiCalendar(targetId, prevDate);
+        renderShamsiCalendar(targetId, prevMonthDate);
       });
     }
 
     if (nextNav) {
       nextNav.addEventListener('click', () => {
-        const nextDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
-        renderShamsiCalendar(targetId, nextDate);
+        renderShamsiCalendar(targetId, nextMonthDate);
       });
     }
   }
@@ -169,6 +274,10 @@
   window.shamsiDatePickerInit = function(){
     document.querySelectorAll('.shamsi-datepicker-field').forEach(field => {
       field.setAttribute('readonly','readonly');
+      var storedJalali = field.getAttribute('data-jalali');
+      if (storedJalali) {
+        field.value = storedJalali;
+      }
       field.addEventListener('click', function(){
         const storedGregorian = this.getAttribute('data-gregorian');
         let baseDate = storedGregorian ? new Date(storedGregorian) : new Date();
