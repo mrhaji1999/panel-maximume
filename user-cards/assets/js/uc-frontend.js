@@ -143,6 +143,7 @@
     var isoDate = isoFull ? isoFull.split('T')[0] : '';
     var $msg = availabilityMessageTarget($m);
     var $summary = $m.find('.uc-availability-summary');
+    var jalaliDisplayValue = ($input.val && $input.val() ? $input.val() : '').toString().trim();
 
     if (!currentCardId) {
       return;
@@ -305,7 +306,9 @@
           if (weekdayLabel) {
             headerParts.push(weekdayLabel);
           }
-          if (selectedDateIso) {
+          if (jalaliDisplayValue) {
+            headerParts.push(jalaliDisplayValue);
+          } else if (selectedDateIso) {
             headerParts.push(selectedDateIso);
           }
           var headerText = headerLabel;
