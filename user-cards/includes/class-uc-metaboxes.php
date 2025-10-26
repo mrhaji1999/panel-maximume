@@ -12,6 +12,7 @@ class UC_Metaboxes {
     public static function render_card_box($post) {
         wp_nonce_field('uc_card_save', 'uc_card_nonce');
         $related_post_id = (int) get_post_meta($post->ID, '_uc_related_post_id', true);
+        $store_link = get_post_meta($post->ID, '_uc_store_link', true);
         $related_post_type = $related_post_id ? get_post_type($related_post_id) : 'post';
         $public_types = get_post_types(['public' => true], 'objects');
         unset($public_types['attachment']);
@@ -36,6 +37,11 @@ class UC_Metaboxes {
         }
         echo '</select>';
         echo '</div>';
+        echo '<div class="uc-admin-row">';
+        echo '<label for="uc_store_link"><strong>' . esc_html__('Store Link', 'user-cards') . '</strong></label>';
+        echo '<input type="url" id="uc_store_link" name="uc_store_link" class="regular-text" value="' . esc_attr($store_link) . '" placeholder="https://example.com" />';
+        echo '</div>';
+
         echo '<p class="uc-note">' . esc_html__('Select the post type, then the specific post to associate with this card.', 'user-cards') . '</p>';
     }
 
@@ -302,28 +308,51 @@ class UC_Metaboxes {
         $rows = get_post_meta($post->ID, '_uc_pricings', true);
         if (!is_array($rows) || empty($rows)) {
             $rows = [
-                ['label' => 'فروش نرمال', 'amount' => 0],
-                ['label' => 'فروش افزایشی 1', 'amount' => 0],
-                ['label' => 'فروش افزایشی 2', 'amount' => 0],
-                ['label' => 'فروش افزایشی 3', 'amount' => 0],
-                ['label' => 'فروش افزایشی 4', 'amount' => 0],
+                ['label' => 'فروش نرمال', 'amount' => 0, 'wallet_amount' => 0, 'code_type' => 'wallet'],
+                ['label' => 'فروش افزایشی 1', 'amount' => 0, 'wallet_amount' => 0, 'code_type' => 'wallet'],
+                ['label' => 'فروش افزایشی 2', 'amount' => 0, 'wallet_amount' => 0, 'code_type' => 'wallet'],
+                ['label' => 'فروش افزایشی 3', 'amount' => 0, 'wallet_amount' => 0, 'code_type' => 'wallet'],
+                ['label' => 'فروش افزایشی 4', 'amount' => 0, 'wallet_amount' => 0, 'code_type' => 'wallet'],
             ];
         }
-        echo '<style>.uc-price-row{display:flex;gap:8px;align-items:center;margin-bottom:8px} .uc-price-row input[type=text]{min-width:240px} .uc-price-row input[type=number]{width:160px} .uc-price-row .button{vertical-align:middle} .uc-price-rows{margin-top:6px} .uc-admin-note{color:#666}</style>';
+        echo '<style>.uc-price-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px} .uc-price-row input[type=text]{min-width:200px} .uc-price-row input[type=number]{width:140px} .uc-price-row select{min-width:140px} .uc-price-row .button{vertical-align:middle} .uc-price-rows{margin-top:6px} .uc-admin-note{color:#666}</style>';
         echo '<div class="uc-price-rows" id="uc-price-rows">';
         foreach ($rows as $r) {
             $label = isset($r['label']) ? $r['label'] : '';
             $amount = isset($r['amount']) ? $r['amount'] : '';
+            $wallet_amount = isset($r['wallet_amount']) ? $r['wallet_amount'] : 0;
+            $code_type = isset($r['code_type']) ? $r['code_type'] : 'wallet';
             echo '<div class="uc-price-row">';
             echo '<input type="text" name="uc_price_label[]" value="' . esc_attr($label) . '" placeholder="عنوان" />';
             echo '<input type="number" step="0.01" name="uc_price_amount[]" value="' . esc_attr($amount) . '" placeholder="مبلغ" />';
+            echo '<input type="number" step="0.01" name="uc_price_wallet_amount[]" value="' . esc_attr($wallet_amount) . '" placeholder="' . esc_attr__('مبلغ کیف پول', 'user-cards') . '" />';
+            echo '<select name="uc_price_code_type[]">';
+            $options = [
+                'wallet' => esc_html__('Wallet', 'user-cards'),
+                'coupon' => esc_html__('Coupon', 'user-cards'),
+            ];
+            foreach ($options as $value => $label_option) {
+                printf('<option value="%1$s" %2$s>%3$s</option>', esc_attr($value), selected($code_type, $value, false), esc_html($label_option));
+            }
+            echo '</select>';
             echo '<button type="button" class="button uc-price-remove">' . esc_html__('حذف', 'user-cards') . '</button>';
             echo '</div>';
         }
         echo '</div>';
         echo '<button type="button" class="button button-secondary" id="uc-price-add">' . esc_html__('افزودن ردیف', 'user-cards') . '</button>';
         echo '<p class="uc-admin-note">' . esc_html__('این فیلدها به صورت آرایه ذخیره می‌شوند و از API قابل دریافت/ارسال هستند.', 'user-cards') . '</p>';
-        echo '<template id="uc-price-template"><div class="uc-price-row"><input type="text" name="uc_price_label[]" placeholder="عنوان" /><input type="number" step="0.01" name="uc_price_amount[]" placeholder="مبلغ" /><button type="button" class="button uc-price-remove">' . esc_html__('حذف', 'user-cards') . '</button></div></template>';
+        echo '<template id="uc-price-template">'
+            . '<div class="uc-price-row">'
+            . '<input type="text" name="uc_price_label[]" placeholder="عنوان" />'
+            . '<input type="number" step="0.01" name="uc_price_amount[]" placeholder="مبلغ" />'
+            . '<input type="number" step="0.01" name="uc_price_wallet_amount[]" value="0" placeholder="' . esc_attr__('مبلغ کیف پول', 'user-cards') . '" />'
+            . '<select name="uc_price_code_type[]">'
+            . '<option value="wallet">' . esc_html__('Wallet', 'user-cards') . '</option>'
+            . '<option value="coupon">' . esc_html__('Coupon', 'user-cards') . '</option>'
+            . '</select>'
+            . '<button type="button" class="button uc-price-remove">' . esc_html__('حذف', 'user-cards') . '</button>'
+            . '</div>'
+            . '</template>';
     }
 
     public static function save($post_id, $post) {
@@ -337,19 +366,39 @@ class UC_Metaboxes {
             } else {
                 delete_post_meta($post_id, '_uc_related_post_id');
             }
+
+            $store_link = isset($_POST['uc_store_link']) ? esc_url_raw(trim((string) $_POST['uc_store_link'])) : '';
+            if (!empty($store_link)) {
+                update_post_meta($post_id, '_uc_store_link', $store_link);
+            } else {
+                delete_post_meta($post_id, '_uc_store_link');
+            }
         }
-        
+
         // Pricing save
         if (isset($_POST['uc_pricing_nonce']) && wp_verify_nonce($_POST['uc_pricing_nonce'], 'uc_pricing_save')) {
             $labels = isset($_POST['uc_price_label']) && is_array($_POST['uc_price_label']) ? array_map('sanitize_text_field', (array) $_POST['uc_price_label']) : [];
             $amounts = isset($_POST['uc_price_amount']) && is_array($_POST['uc_price_amount']) ? (array) $_POST['uc_price_amount'] : [];
+            $wallet_amounts = isset($_POST['uc_price_wallet_amount']) && is_array($_POST['uc_price_wallet_amount']) ? (array) $_POST['uc_price_wallet_amount'] : [];
+            $code_types = isset($_POST['uc_price_code_type']) && is_array($_POST['uc_price_code_type']) ? (array) $_POST['uc_price_code_type'] : [];
             $rows = [];
-            $count = max(count($labels), count($amounts));
+            $count = max(count($labels), count($amounts), count($wallet_amounts), count($code_types));
+            $allowed_types = ['wallet', 'coupon'];
             for ($i=0; $i<$count; $i++) {
                 $label = isset($labels[$i]) ? wp_strip_all_tags($labels[$i]) : '';
                 $amount = isset($amounts[$i]) ? floatval($amounts[$i]) : 0;
-                if ($label === '' && $amount === 0.0) continue;
-                $rows[] = ['label' => $label, 'amount' => $amount];
+                $wallet_amount = isset($wallet_amounts[$i]) ? floatval($wallet_amounts[$i]) : 0;
+                $code_type = isset($code_types[$i]) ? sanitize_key($code_types[$i]) : 'wallet';
+                if (!in_array($code_type, $allowed_types, true)) {
+                    $code_type = 'wallet';
+                }
+                if ($label === '' && $amount === 0.0 && $wallet_amount === 0.0) continue;
+                $rows[] = [
+                    'label' => $label,
+                    'amount' => $amount,
+                    'wallet_amount' => $wallet_amount,
+                    'code_type' => $code_type,
+                ];
             }
             update_post_meta($post_id, '_uc_pricings', $rows);
         }
