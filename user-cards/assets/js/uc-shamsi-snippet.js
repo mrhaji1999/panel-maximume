@@ -141,6 +141,26 @@
     return year + '/' + month + '/' + day;
   }
 
+  function parseJalaliString(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parts = trimmed.split('/');
+    if (parts.length !== 3) return null;
+    const jy = parseInt(parts[0], 10);
+    const jm = parseInt(parts[1], 10);
+    const jd = parseInt(parts[2], 10);
+    if ([jy, jm, jd].some(function(num){ return isNaN(num); })) return null;
+    try {
+      const gParts = jalaali.toGregorian(jy, jm, jd);
+      const date = new Date(gParts[0], gParts[1] - 1, gParts[2]);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    } catch (err) {
+      return null;
+    }
+  }
+
   function getJalaliMonthContext(baseDate){
     const safeDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     safeDate.setHours(0,0,0,0);
@@ -200,6 +220,13 @@
       container.appendChild(popup);
     }
 
+    document.querySelectorAll('.shamsi-calendar-popup').forEach(other => {
+      if (other !== popup) {
+        other.style.display = 'none';
+      }
+    });
+
+    const storedJalaliValue = (inputField.getAttribute('data-jalali') || '').trim();
     const viewDate = (date instanceof Date && !isNaN(date.getTime())) ? new Date(date.getTime()) : new Date();
     viewDate.setHours(0,0,0,0);
     const monthContext = getJalaliMonthContext(viewDate);
@@ -207,20 +234,28 @@
     const firstDayOffset = (monthStart.getDay() + 1) % 7; // Saturday=0
     const todayGregorian = new Date();
     const todayAtMidnight = new Date(todayGregorian.getFullYear(), todayGregorian.getMonth(), todayGregorian.getDate());
+    todayAtMidnight.setHours(0,0,0,0);
 
     let body = '<div class="shamsi-calendar-body">';
     weekDays.forEach(d => { body += "<div class='shamsi-calendar-day-name'>"+d+"</div>"; });
     for (let i=0;i<firstDayOffset;i++) body += '<div></div>';
 
     days.forEach(dayEntry => {
+      if (dayEntry.jalaliMonth !== shMonthIndex) {
+        return;
+      }
       const dayDate = dayEntry.gregorian;
       const isToday = dayDate.toDateString() === todayGregorian.toDateString();
-      const dayAtMidnight = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate()).setHours(0,0,0,0);
-      const isSelectable = dayAtMidnight >= todayAtMidnight.getTime();
+      const midnightDate = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
+      midnightDate.setHours(0,0,0,0);
+      const isSelectable = midnightDate.getTime() >= todayAtMidnight.getTime();
       let classes = 'shamsi-calendar-day';
       if (isToday) classes += ' is-today';
       if (isSelectable) classes += ' is-selectable';
       const displayValue = formatJalaaliDate(dayEntry.jalaliYear, dayEntry.jalaliMonth, dayEntry.jalaliDay);
+      if (storedJalaliValue && storedJalaliValue === displayValue) {
+        classes += ' is-selected';
+      }
       body += '<div class="'+classes+'" data-date="'+displayValue+'" data-gregorian="'+dayDate.toISOString()+'">'+dayEntry.jalaliDay+'</div>';
     });
     body += '</div>';
@@ -280,14 +315,29 @@
       }
       field.addEventListener('click', function(){
         const storedGregorian = this.getAttribute('data-gregorian');
-        let baseDate = storedGregorian ? new Date(storedGregorian) : new Date();
+        const storedJalaliValue = this.getAttribute('data-jalali');
+        let baseDate = storedGregorian ? new Date(storedGregorian) : null;
+        if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
+          baseDate = parseJalaliString(storedJalaliValue);
+        }
         if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
           baseDate = new Date();
         }
+        baseDate.setHours(0,0,0,0);
         renderShamsiCalendar(this.id, baseDate);
       });
     });
   };
+
+  document.addEventListener('click', function(evt){
+    const target = evt.target;
+    if (!target) return;
+    if (typeof Element !== 'undefined' && !(target instanceof Element)) return;
+    if (target.closest('.shamsi-datepicker-container')) return;
+    document.querySelectorAll('.shamsi-calendar-popup').forEach(popup => {
+      popup.style.display = 'none';
+    });
+  });
 
   document.addEventListener('DOMContentLoaded', function(){
     if (typeof window.shamsiDatePickerInit === 'function') window.shamsiDatePickerInit();

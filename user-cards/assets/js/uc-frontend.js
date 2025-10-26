@@ -1,4 +1,36 @@
 (function($){
+  var ucAjax = (typeof window !== 'undefined' && window.UC_Ajax) ? window.UC_Ajax : {};
+  var ucI18n = ucAjax.i18n || {};
+  var ucAjaxUrl = ucAjax.ajax_url || ((typeof window !== 'undefined' && window.ajaxurl) ? window.ajaxurl : '');
+  var ucNonce = ucAjax.nonce || '';
+  var fallbackTexts = {
+    invalidCode: 'کد وارد شده نامعتبر است.',
+    usedCode: 'این کد قبلا استفاده شده است.',
+    serverError: 'خطایی رخ داد. مجدد تلاش کنید.',
+    invalidDate: 'تاریخ انتخابی نامعتبر است.',
+    slotFull: 'این ساعت برای این تاریخ تکمیل شده است.',
+    availabilityDayLabel: 'روز انتخابی:',
+    availabilityUsage: 'رزرو شده {used} از {capacity} (باقی‌مانده {remaining})',
+    availabilityNoData: 'برای این تاریخ ظرفیتی ثبت نشده است.'
+  };
+
+  function translate(key, fallback){
+    var fb = (typeof fallback !== 'undefined') ? fallback : (fallbackTexts[key] || '');
+    if (ucI18n && Object.prototype.hasOwnProperty.call(ucI18n, key)) {
+      return ucI18n[key];
+    }
+    return fb;
+  }
+
+  function ensureAjaxUrl(){
+    if (ucAjaxUrl) return ucAjaxUrl;
+    if (typeof window !== 'undefined' && window.ajaxurl) {
+      ucAjaxUrl = window.ajaxurl;
+      return ucAjaxUrl;
+    }
+    console.error('User Cards: ajax_url is missing from UC_Ajax config.');
+    return '';
+  }
   function ucSetStep(stepNumber){
     var $m = $('#uc-card-modal');
     // 1) body steps
@@ -40,14 +72,20 @@
     e.preventDefault();
     var $f = $(this), data = $f.serialize();
     $f.addClass('uc-loading');
-    $.post(UC_Ajax.ajax_url, data).done(function(res){
+    var ajaxUrl = ensureAjaxUrl();
+    if (!ajaxUrl) {
+      $f.find('.uc-form-msg').text(translate('serverError'));
+      $f.removeClass('uc-loading');
+      return;
+    }
+    $.post(ajaxUrl, data).done(function(res){
       if(res.success){
         window.location.href = res.data.redirect;
       } else {
-        $f.find('.uc-form-msg').text(res.data && res.data.message || UC_Ajax.i18n.serverError);
+        $f.find('.uc-form-msg').text(res.data && res.data.message || translate('serverError'));
       }
     }).fail(function(){
-      $f.find('.uc-form-msg').text(UC_Ajax.i18n.serverError);
+      $f.find('.uc-form-msg').text(translate('serverError'));
     }).always(function(){ $f.removeClass('uc-loading'); });
   });
 
@@ -56,14 +94,20 @@
     e.preventDefault();
     var $f = $(this), data = $f.serialize();
     $f.addClass('uc-loading');
-    $.post(UC_Ajax.ajax_url, data).done(function(res){
+    var ajaxUrl = ensureAjaxUrl();
+    if (!ajaxUrl) {
+      $f.find('.uc-form-msg').text(translate('serverError'));
+      $f.removeClass('uc-loading');
+      return;
+    }
+    $.post(ajaxUrl, data).done(function(res){
       if(res.success){
         window.location.href = res.data.redirect;
       } else {
-        $f.find('.uc-form-msg').text(res.data && res.data.message || UC_Ajax.i18n.serverError);
+        $f.find('.uc-form-msg').text(res.data && res.data.message || translate('serverError'));
       }
     }).fail(function(){
-      $f.find('.uc-form-msg').text(UC_Ajax.i18n.serverError);
+      $f.find('.uc-form-msg').text(translate('serverError'));
     }).always(function(){ $f.removeClass('uc-loading'); });
   });
 
@@ -75,8 +119,8 @@
       validatedCode = '';
 
   function getApiBase(){
-    if (window.UC_Ajax && UC_Ajax.api_url) {
-      return UC_Ajax.api_url.replace(/\/?$/, '');
+    if (ucAjax && ucAjax.api_url) {
+      return ucAjax.api_url.replace(/\/?$/, '');
     }
     var origin = (window.location && window.location.origin) ? window.location.origin : '';
     return origin + '/wp-json/user-cards-bridge/v1';
@@ -126,9 +170,7 @@
   }
 
   function formatUsageMessage(used, capacity, remaining) {
-    var template = (UC_Ajax && UC_Ajax.i18n && UC_Ajax.i18n.availabilityUsage)
-      ? UC_Ajax.i18n.availabilityUsage
-      : 'رزرو شده {used} از {capacity} (باقی‌مانده {remaining})';
+    var template = translate('availabilityUsage');
 
     return template
       .replace('{used}', used)
@@ -155,7 +197,7 @@
     if (!isoDate) {
       selectedDateIso = '';
       if ($msg.length && $input.val()) {
-        $msg.text(UC_Ajax.i18n.invalidDate || '');
+        $msg.text(translate('invalidDate', ''));
       }
       $m.find('.uc-time').each(function(){
         $(this).prop('disabled', true).removeClass('active').addClass('is-disabled');
@@ -289,9 +331,7 @@
       if ($summary.length) {
         var keys = Object.keys(map);
         if (!keys.length) {
-          var noDataText = (UC_Ajax && UC_Ajax.i18n && UC_Ajax.i18n.availabilityNoData)
-            ? UC_Ajax.i18n.availabilityNoData
-            : 'برای این تاریخ ظرفیتی ثبت نشده است.';
+          var noDataText = translate('availabilityNoData');
           $summary.text(noDataText).addClass('empty');
         } else {
           keys.sort(function(a, b){ return parseInt(a, 10) - parseInt(b, 10); });
@@ -302,9 +342,7 @@
           if (!weekdayLabel && slotsForDay.length) {
             weekdayLabel = getWeekdayName(slotsForDay[0] && slotsForDay[0].weekday);
           }
-          var headerLabel = (UC_Ajax && UC_Ajax.i18n && UC_Ajax.i18n.availabilityDayLabel)
-            ? UC_Ajax.i18n.availabilityDayLabel
-            : 'روز انتخابی:';
+          var headerLabel = translate('availabilityDayLabel');
           var headerParts = [];
           if (weekdayLabel) {
             headerParts.push(weekdayLabel);
@@ -339,7 +377,7 @@
         }
       }
     }).fail(function(jqXHR){
-      var message = UC_Ajax.i18n.serverError;
+      var message = translate('serverError');
       if (jqXHR && jqXHR.responseJSON) {
         if (jqXHR.responseJSON.message) {
           message = jqXHR.responseJSON.message;
@@ -378,10 +416,27 @@
     return false;
   }
 
+  function ensureShamsiSnippet(attempts){
+    if (initUserSnippet()) {
+      return true;
+    }
+    var remaining = (typeof attempts === 'number') ? attempts : 8;
+    if (remaining <= 0) {
+      return false;
+    }
+    setTimeout(function(){ ensureShamsiSnippet(remaining - 1); }, 80);
+    return false;
+  }
+
+  function hideAllShamsiPopups(){
+    $('.shamsi-calendar-popup').hide();
+  }
+
   $(document).on('click', '.uc-card', function(){
     var $card = $(this);
     currentCardId = $card.data('card-id');
     var content = $card.find('.uc-card-content').html();
+    hideAllShamsiPopups();
     var $m = $('#uc-card-modal');
     $m.addClass('active');
     ucSetStep(1);
@@ -394,13 +449,15 @@
     $m.attr('aria-hidden', 'false');
 
     // Attempt early init
-    initUserSnippet();
+    ensureShamsiSnippet();
   });
 
   $(document).on('click', '.uc-modal-close, [data-action="close-modal"]', function(){
+    hideAllShamsiPopups();
     $('#uc-card-modal').removeClass('active').attr('aria-hidden','true');
   });
   $(document).on('click', '.uc-modal-backdrop', function(){
+    hideAllShamsiPopups();
     $('#uc-card-modal').removeClass('active').attr('aria-hidden','true');
   });
 
@@ -408,24 +465,36 @@
   $(document).on('click', '[data-action="have-code"]', function(){
     var $m = $('#uc-card-modal');
     ucSetStep(2);
+    hideAllShamsiPopups();
     $m.find('#uc-code-input').val('').focus();
     $m.find('.uc-step-2 .uc-inline-msg').text('');
   });
   $(document).on('click', '[data-action="back-1"]', function(){
     ucSetStep(1);
+    hideAllShamsiPopups();
   });
   $(document).on('click', '[data-action="back-2"]', function(){
     ucSetStep(2);
+    hideAllShamsiPopups();
   });
 
   // Validate code
   $(document).on('click', '[data-action="validate-code"]', function(){
     var $m = $('#uc-card-modal');
     var code = ($m.find('#uc-code-input').val() || '').trim();
-    if(!code){ $m.find('.uc-step-2 .uc-inline-msg').text(UC_Ajax.i18n.invalidCode); return; }
-    var payload = { action: 'uc_validate_code', _wpnonce: UC_Ajax.nonce, code: code, card_id: currentCardId };
+    if(!code){
+      $m.find('.uc-step-2 .uc-inline-msg').text(translate('invalidCode'));
+      return;
+    }
+    var payload = { action: 'uc_validate_code', _wpnonce: ucNonce, code: code, card_id: currentCardId };
     $m.find('.uc-step-2').addClass('uc-loading');
-    $.post(UC_Ajax.ajax_url, payload).done(function(res){
+    var ajaxUrl = ensureAjaxUrl();
+    if (!ajaxUrl) {
+      $m.find('.uc-step-2 .uc-inline-msg').text(translate('serverError'));
+      $m.find('.uc-step-2').removeClass('uc-loading');
+      return;
+    }
+    $.post(ajaxUrl, payload).done(function(res){
       if(res.success){
         validatedCode = code;
         ucSetStep(3);
@@ -436,11 +505,15 @@
         setTimeout(function(){ ucFetchAvailability(); }, 10);
       } else {
         var status = res.data && res.data.status;
-        if(status === 'used'){ $m.find('.uc-step-2 .uc-inline-msg').text(UC_Ajax.i18n.usedCode); }
-        else { $m.find('.uc-step-2 .uc-inline-msg').text(UC_Ajax.i18n.invalidCode); }
+        if(status === 'used'){
+          $m.find('.uc-step-2 .uc-inline-msg').text(translate('usedCode'));
+        }
+        else {
+          $m.find('.uc-step-2 .uc-inline-msg').text(translate('invalidCode'));
+        }
       }
     }).fail(function(){
-      $m.find('.uc-step-2 .uc-inline-msg').text(UC_Ajax.i18n.serverError);
+      $m.find('.uc-step-2 .uc-inline-msg').text(translate('serverError'));
     }).always(function(){ $m.find('.uc-step-2').removeClass('uc-loading'); });
   });
 
@@ -458,15 +531,19 @@
     var $m = $('#uc-card-modal');
     var date = ($m.find('#uc-date-input').val() || '').trim();
     var $msg = availabilityMessageTarget($m);
-    if(!validatedCode){ $m.find('.uc-step-3').prev('.uc-inline-msg').text(UC_Ajax.i18n.invalidCode); return; }
+    if(!validatedCode){
+      $m.find('.uc-step-3').prev('.uc-inline-msg').text(translate('invalidCode'));
+      return;
+    }
     if(!date || !selectedDateIso || selectedHour === null){
-      if ($msg.length) { $msg.text(UC_Ajax.i18n.invalidDate || UC_Ajax.i18n.serverError); }
-      alert('لطفا تاریخ و ساعت را انتخاب کنید.');
+      var invalidDateText = translate('invalidDate') || translate('serverError');
+      if ($msg.length) { $msg.text(invalidDateText); }
+      alert(invalidDateText || 'لطفا تاریخ و ساعت را انتخاب کنید.');
       return;
     }
     var payload = {
       action:'uc_submit_form',
-      _wpnonce: UC_Ajax.nonce,
+      _wpnonce: ucNonce,
       card_id: currentCardId,
       code: validatedCode,
       date: date,
@@ -476,8 +553,16 @@
       hour: selectedHour
     };
     $m.find('.uc-step-3').addClass('uc-loading');
+    var ajaxUrl = ensureAjaxUrl();
+    if (!ajaxUrl) {
+      var serverError = translate('serverError');
+      if ($msg.length) { $msg.text(serverError); }
+      alert(serverError);
+      $m.find('.uc-step-3').removeClass('uc-loading');
+      return;
+    }
     $.ajax({
-      url: UC_Ajax.ajax_url,
+      url: ajaxUrl,
       method: 'POST',
       data: payload,
       dataType: 'json'
@@ -487,13 +572,13 @@
         var msg = 'ثبت شد. \nکد سوپرایز شما: ' + (res.data && res.data.surprise || '');
         $m.find('.uc-step-4 .uc-success').text(msg);
       } else {
-        var message = (res && res.data && res.data.message) ? res.data.message : UC_Ajax.i18n.serverError;
+        var message = (res && res.data && res.data.message) ? res.data.message : translate('serverError');
         alert(message);
       }
     }).fail(function(jqXHR){
-      var message = UC_Ajax.i18n.serverError;
+      var message = translate('serverError');
       if (jqXHR && jqXHR.status === 409) {
-        message = UC_Ajax.i18n.slotFull || UC_Ajax.i18n.serverError;
+        message = translate('slotFull', message);
       } else if (jqXHR && jqXHR.responseJSON) {
         if (jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
           message = jqXHR.responseJSON.data.message;
