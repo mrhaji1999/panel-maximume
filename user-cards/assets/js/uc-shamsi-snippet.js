@@ -15,6 +15,31 @@
     }
   };
 
+  const displayFormatter = (function(){
+    try {
+      if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+        return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+      }
+    } catch (err) {}
+    return null;
+  })();
+
+  function formatDisplayDate(dayDate) {
+    if (displayFormatter) {
+      try {
+        return displayFormatter.format(dayDate);
+      } catch (err) {}
+    }
+    const year = dayDate.getFullYear();
+    const month = ('0' + (dayDate.getMonth() + 1)).slice(-2);
+    const day = ('0' + dayDate.getDate()).slice(-2);
+    return year + '/' + month + '/' + day;
+  }
+
   function renderShamsiCalendar(targetId, date){
     const inputField = document.getElementById(targetId);
     if (!inputField) return;
@@ -45,7 +70,8 @@
       let classes = 'shamsi-calendar-day';
       if (isToday) classes += ' is-today';
       if (isSelectable) classes += ' is-selectable';
-      body += '<div class="'+classes+'" data-date="'+dayDate.toLocaleDateString('fa-IR')+'" data-gregorian="'+dayDate.toISOString()+'">'+day+'</div>';
+      const displayValue = formatDisplayDate(dayDate);
+      body += '<div class="'+classes+'" data-date="'+displayValue+'" data-gregorian="'+dayDate.toISOString()+'">'+day+'</div>';
     }
     body += '</div>';
 
@@ -61,7 +87,8 @@
 
     popup.querySelectorAll('.shamsi-calendar-day.is-selectable').forEach(el => {
       el.addEventListener('click', function(){
-        inputField.value = this.getAttribute('data-date');
+        const displayValue = this.getAttribute('data-date') || '';
+        inputField.value = displayValue;
         inputField.setAttribute('data-gregorian', this.getAttribute('data-gregorian'));
         try { inputField.dispatchEvent(new Event('change', { bubbles: true })); } catch(e) { var ev = document.createEvent('Event'); ev.initEvent('change', true, false); inputField.dispatchEvent(ev); }
         popup.style.display = 'none';
