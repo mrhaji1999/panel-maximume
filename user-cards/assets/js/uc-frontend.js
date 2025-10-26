@@ -500,7 +500,7 @@
         ucSetStep(3);
         $m.find('.uc-step-2 .uc-inline-msg').text('');
         // Ensure datepicker initializes when step 3 becomes visible
-        setTimeout(function(){ ensureShamsiSnippet(); }, 0);
+        setTimeout(function(){ initUserSnippet(); }, 0);
         // When step 3 shows, try to fetch availability if date preselected
         setTimeout(function(){ ucFetchAvailability(); }, 10);
       } else {
