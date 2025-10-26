@@ -247,12 +247,16 @@
     const storedJalaliValue = (inputField.getAttribute('data-jalali') || '').trim();
     const viewDate = (date instanceof Date && !isNaN(date.getTime())) ? new Date(date.getTime()) : new Date();
     viewDate.setHours(0,0,0,0);
-    const monthContext = getJalaliMonthContext(viewDate);
-    const { shYear, shMonthIndex, shMonthName, monthStart, days, prevMonthDate, nextMonthDate } = monthContext;
-    const firstDayOffset = (monthStart.getDay() + 1) % 7; // Saturday=0
     const todayGregorian = new Date();
     const todayAtMidnight = new Date(todayGregorian.getFullYear(), todayGregorian.getMonth(), todayGregorian.getDate());
     todayAtMidnight.setHours(0,0,0,0);
+    if (viewDate.getTime() < todayAtMidnight.getTime()) {
+      viewDate.setTime(todayAtMidnight.getTime());
+    }
+    const monthContext = getJalaliMonthContext(viewDate);
+    const { shYear, shMonthIndex, shMonthName, monthStart, days, prevMonthDate, nextMonthDate } = monthContext;
+    const firstDayOffset = (monthStart.getDay() + 1) % 7; // Saturday=0
+    const canGoPrev = prevMonthDate.getTime() >= todayAtMidnight.getTime();
 
     let body = '<div class="shamsi-calendar-body">';
     weekDays.forEach(d => { body += "<div class='shamsi-calendar-day-name'>"+d+"</div>"; });
@@ -279,7 +283,7 @@
       <div class="shamsi-calendar-header">
         <button type="button" class="shamsi-nav-next">ماه بعد &raquo;</button>
         <span class="shamsi-current-month"> ${shMonthName} ${shYear} </span>
-        <button type="button" class="shamsi-nav-prev">&laquo; ماه قبل</button>
+        <button type="button" class="shamsi-nav-prev" ${canGoPrev ? '' : 'disabled="disabled"'}>&laquo; ماه قبل</button>
       </div>
       ${body}
     `;
@@ -308,7 +312,7 @@
     const prevNav = popup.querySelector('.shamsi-nav-prev');
     const nextNav = popup.querySelector('.shamsi-nav-next');
 
-    if (prevNav) {
+    if (prevNav && canGoPrev) {
       prevNav.addEventListener('click', () => {
         renderShamsiCalendar(targetId, prevMonthDate);
       });
@@ -337,6 +341,13 @@
         }
         if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
           baseDate = new Date();
+        }
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        todayStart.setHours(0,0,0,0);
+        baseDate.setHours(0,0,0,0);
+        if (baseDate.getTime() < todayStart.getTime()) {
+          baseDate = todayStart;
         }
         baseDate.setHours(0,0,0,0);
         renderShamsiCalendar(this.id, baseDate);
