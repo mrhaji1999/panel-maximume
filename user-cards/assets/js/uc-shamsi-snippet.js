@@ -88,6 +88,59 @@
     return year + '/' + month + '/' + day;
   }
 
+  function getJalaliMonthContext(baseDate){
+    const safeDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    safeDate.setHours(0,0,0,0);
+    const headerParts = jalaali.fromDate(safeDate);
+    const shYear = headerParts[0];
+    const shMonthIndex = headerParts[1];
+    const shMonthName = jalaali.monthNames[shMonthIndex - 1] || '';
+
+    let monthStart = new Date(safeDate.getTime());
+    while (true) {
+      const parts = jalaali.fromDate(monthStart);
+      if (parts[0] === shYear && parts[1] === shMonthIndex && parts[2] === 1) {
+        break;
+      }
+      monthStart.setDate(monthStart.getDate() - 1);
+      monthStart.setHours(0,0,0,0);
+    }
+
+    const days = [];
+    let iterator = new Date(monthStart.getTime());
+    while (true) {
+      const parts = jalaali.fromDate(iterator);
+      if (parts[0] !== shYear || parts[1] !== shMonthIndex) {
+        break;
+      }
+      days.push({
+        gregorian: new Date(iterator.getTime()),
+        jalaliYear: parts[0],
+        jalaliMonth: parts[1],
+        jalaliDay: parts[2]
+      });
+      iterator.setDate(iterator.getDate() + 1);
+      iterator.setHours(0,0,0,0);
+    }
+
+    const prevMonthDate = new Date(monthStart.getTime());
+    prevMonthDate.setDate(prevMonthDate.getDate() - 1);
+    prevMonthDate.setHours(0,0,0,0);
+
+    const nextMonthDate = new Date(iterator.getTime());
+    nextMonthDate.setHours(0,0,0,0);
+
+    return {
+      shYear,
+      shMonthIndex,
+      shMonthName,
+      monthStart,
+      days,
+      prevMonthDate,
+      nextMonthDate
+    };
+  }
+
   function renderShamsiCalendar(targetId, date){
     const inputField = document.getElementById(targetId);
     if (!inputField) return;
@@ -99,14 +152,11 @@
       container.appendChild(popup);
     }
 
-    const viewDate = new Date(date.getFullYear(), date.getMonth(), 1);
-    const headerParts = jalaali.fromDate(viewDate);
-    const shYear = headerParts[0];
-    const shMonthIndex = headerParts[1];
-    const shMonthName = jalaali.monthNames[shMonthIndex - 1] || '';
-    const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
-    const firstDayOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay();
-    const firstDayOffset = (firstDayOfMonth + 1) % 7; // Saturday=0
+    const viewDate = (date instanceof Date && !isNaN(date.getTime())) ? new Date(date.getTime()) : new Date();
+    viewDate.setHours(0,0,0,0);
+    const monthContext = getJalaliMonthContext(viewDate);
+    const { shYear, shMonthIndex, shMonthName, monthStart, days, prevMonthDate, nextMonthDate } = monthContext;
+    const firstDayOffset = (monthStart.getDay() + 1) % 7; // Saturday=0
     const todayGregorian = new Date();
     const todayAtMidnight = new Date(todayGregorian.getFullYear(), todayGregorian.getMonth(), todayGregorian.getDate());
 
@@ -114,18 +164,17 @@
     weekDays.forEach(d => { body += "<div class='shamsi-calendar-day-name'>"+d+"</div>"; });
     for (let i=0;i<firstDayOffset;i++) body += '<div></div>';
 
-    for (let day=1; day<=daysInMonth; day++){
-      const dayDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    days.forEach(dayEntry => {
+      const dayDate = dayEntry.gregorian;
       const isToday = dayDate.toDateString() === todayGregorian.toDateString();
-      const dayAtMidnight = new Date(viewDate.getFullYear(), viewDate.getMonth(), day).setHours(0,0,0,0);
+      const dayAtMidnight = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate()).setHours(0,0,0,0);
       const isSelectable = dayAtMidnight >= todayAtMidnight.getTime();
       let classes = 'shamsi-calendar-day';
       if (isToday) classes += ' is-today';
       if (isSelectable) classes += ' is-selectable';
-      const jalaliParts = jalaali.fromDate(dayDate);
-      const displayValue = formatJalaaliDate(jalaliParts[0], jalaliParts[1], jalaliParts[2]);
-      body += '<div class="'+classes+'" data-date="'+displayValue+'" data-gregorian="'+dayDate.toISOString()+'">'+jalaliParts[2]+'</div>';
-    }
+      const displayValue = formatJalaaliDate(dayEntry.jalaliYear, dayEntry.jalaliMonth, dayEntry.jalaliDay);
+      body += '<div class="'+classes+'" data-date="'+displayValue+'" data-gregorian="'+dayDate.toISOString()+'">'+dayEntry.jalaliDay+'</div>';
+    });
     body += '</div>';
 
     popup.innerHTML = `
@@ -141,9 +190,19 @@
     popup.querySelectorAll('.shamsi-calendar-day.is-selectable').forEach(el => {
       el.addEventListener('click', function(){
         const displayValue = this.getAttribute('data-date') || '';
+        const gregorianValue = this.getAttribute('data-gregorian') || '';
         inputField.value = displayValue;
-        inputField.setAttribute('data-gregorian', this.getAttribute('data-gregorian'));
-        try { inputField.dispatchEvent(new Event('change', { bubbles: true })); } catch(e) { var ev = document.createEvent('Event'); ev.initEvent('change', true, false); inputField.dispatchEvent(ev); }
+        inputField.setAttribute('data-gregorian', gregorianValue);
+        inputField.setAttribute('data-jalali', displayValue);
+        try {
+          inputField.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e) {
+          var ev = document.createEvent('Event');
+          ev.initEvent('change', true, false);
+          inputField.dispatchEvent(ev);
+        }
+        // Re-assert the Jalali value after change listeners have run (some convert it back to Gregorian)
+        setTimeout(function(){ inputField.value = displayValue; }, 0);
         popup.style.display = 'none';
       });
     });
@@ -153,15 +212,13 @@
 
     if (prevNav) {
       prevNav.addEventListener('click', () => {
-        const prevDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
-        renderShamsiCalendar(targetId, prevDate);
+        renderShamsiCalendar(targetId, prevMonthDate);
       });
     }
 
     if (nextNav) {
       nextNav.addEventListener('click', () => {
-        const nextDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
-        renderShamsiCalendar(targetId, nextDate);
+        renderShamsiCalendar(targetId, nextMonthDate);
       });
     }
   }
@@ -169,6 +226,10 @@
   window.shamsiDatePickerInit = function(){
     document.querySelectorAll('.shamsi-datepicker-field').forEach(field => {
       field.setAttribute('readonly','readonly');
+      var storedJalali = field.getAttribute('data-jalali');
+      if (storedJalali) {
+        field.value = storedJalali;
+      }
       field.addEventListener('click', function(){
         const storedGregorian = this.getAttribute('data-gregorian');
         let baseDate = storedGregorian ? new Date(storedGregorian) : new Date();
