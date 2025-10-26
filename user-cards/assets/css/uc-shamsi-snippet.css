@@ -3,6 +3,7 @@
 .shamsi-calendar-popup { display: none; position: absolute; top: 100%; right: 0; z-index: 100000; background: #0e0e12; border: 1px solid #2a2a2e; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); padding: 10px; width: 300px; direction: rtl; font-family: Tahoma, sans-serif; color:#e9e9ee; }
 .shamsi-calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
 .shamsi-calendar-header button { background: #15151b; color:#cfd1d7; border: 1px solid #2a2a2e; padding: 5px 10px; cursor: pointer; border-radius: 8px; }
+.shamsi-calendar-header button[disabled] { opacity: 0.4; cursor: default; }
 .shamsi-calendar-body { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
 .shamsi-calendar-day-name { font-weight: bold; color: #a9abb3; }
 .shamsi-calendar-day { padding: 8px 4px; cursor: not-allowed; border-radius: 8px; transition: background-color 0.2s, color 0.2s; font-size: 13px; background:#101016; color:#8b8d96; border:1px solid #1e1f25; }
