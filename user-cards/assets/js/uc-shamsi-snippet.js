@@ -63,6 +63,31 @@
     return year + '/' + month + '/' + day;
   }
 
+  const displayFormatter = (function(){
+    try {
+      if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+        return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+      }
+    } catch (err) {}
+    return null;
+  })();
+
+  function formatDisplayDate(dayDate) {
+    if (displayFormatter) {
+      try {
+        return displayFormatter.format(dayDate);
+      } catch (err) {}
+    }
+    const year = dayDate.getFullYear();
+    const month = ('0' + (dayDate.getMonth() + 1)).slice(-2);
+    const day = ('0' + dayDate.getDate()).slice(-2);
+    return year + '/' + month + '/' + day;
+  }
+
   function renderShamsiCalendar(targetId, date){
     const inputField = document.getElementById(targetId);
     if (!inputField) return;
