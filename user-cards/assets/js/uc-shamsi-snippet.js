@@ -179,19 +179,18 @@
     const nextMonthDate = new Date(nextMonthParts[0], nextMonthParts[1] - 1, nextMonthParts[2]);
     nextMonthDate.setHours(0,0,0,0);
 
+    const monthLength = Math.round((nextMonthDate.getTime() - monthStart.getTime()) / (24 * 60 * 60 * 1000));
     const days = [];
-    let iterator = new Date(monthStart.getTime());
-    while (iterator.getTime() < nextMonthDate.getTime()) {
-      const currentDay = new Date(iterator.getTime());
-      const parts = jalaali.fromDate(currentDay);
+    for (let day = 1; day <= monthLength; day++) {
+      const currentParts = jalaali.toGregorian(shYear, shMonthIndex, day);
+      const currentDay = new Date(currentParts[0], currentParts[1] - 1, currentParts[2]);
+      currentDay.setHours(0,0,0,0);
       days.push({
         gregorian: currentDay,
-        jalaliYear: parts[0],
-        jalaliMonth: parts[1],
-        jalaliDay: parts[2]
+        jalaliYear: shYear,
+        jalaliMonth: shMonthIndex,
+        jalaliDay: day
       });
-      iterator.setDate(iterator.getDate() + 1);
-      iterator.setHours(0,0,0,0);
     }
 
     const prevMonthDate = new Date(monthStart.getTime());
@@ -241,9 +240,6 @@
     for (let i=0;i<firstDayOffset;i++) body += '<div></div>';
 
     days.forEach(dayEntry => {
-      if (dayEntry.jalaliMonth !== shMonthIndex) {
-        return;
-      }
       const dayDate = dayEntry.gregorian;
       const isToday = dayDate.toDateString() === todayGregorian.toDateString();
       const midnightDate = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
