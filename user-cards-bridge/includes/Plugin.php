@@ -3,6 +3,8 @@
 namespace UCB;
 
 use UCB\Migrations\ReservationDateMigration;
+use UCB\SMS\PayamakPanel;
+use WP_Error;
 
 class Plugin {
     
@@ -93,6 +95,7 @@ class Plugin {
         new API\SMS();
         new API\Stats();
         new API\Webhooks();
+        new API\Codes();
     }
     
     public function add_admin_menu() {
@@ -192,5 +195,63 @@ class Plugin {
         }
 
         return $this->woocommerce_integration;
+    }
+
+    /**
+     * Send templated SMS notification for forwarded codes.
+     */
+    public function send_code_sms(string $type, int $user_id, string $code, float $amount, array $meta = []) {
+        $user = get_user_by('id', $user_id);
+        if (!$user) {
+            return new WP_Error('ucb_sms_user_missing', __('Unable to locate recipient user.', UCB_TEXT_DOMAIN));
+        }
+
+        $phone = $this->resolve_user_phone($user_id, $user);
+        if ('' === $phone) {
+            return new WP_Error('ucb_sms_phone_missing', __('User phone number is not available for SMS delivery.', UCB_TEXT_DOMAIN));
+        }
+
+        $body_option = 'wallet' === $type ? 'ucb_sms_wallet_body_id' : 'ucb_sms_coupon_body_id';
+        $body_id = get_option($body_option, '');
+        if (empty($body_id)) {
+            return new WP_Error('ucb_sms_template_missing', __('SMS template for the selected code type is not configured.', UCB_TEXT_DOMAIN));
+        }
+
+        $formatted_amount = apply_filters('ucb_formatted_wallet_amount', number_format_i18n($amount, 0), $amount, $type, $meta);
+
+        $variables = apply_filters('ucb_code_sms_variables', [
+            (string) $code,
+            (string) $formatted_amount,
+        ], $type, $meta, $user);
+
+        $sms = new PayamakPanel();
+
+        return $sms->send($user_id, $phone, $body_id, $variables);
+    }
+
+    /**
+     * Attempt to resolve an appropriate phone number for SMS delivery.
+     */
+    protected function resolve_user_phone(int $user_id, $user): string {
+        $candidates = apply_filters('ucb_phone_meta_keys', [
+            'billing_phone',
+            'phone',
+            'mobile',
+            'ucb_phone',
+        ], $user_id, $user);
+
+        foreach ($candidates as $meta_key) {
+            $value = get_user_meta($user_id, $meta_key, true);
+            if (!empty($value)) {
+                return preg_replace('/[^0-9+]/', '', (string) $value);
+            }
+        }
+
+        $fallback = get_user_meta($user_id, 'phone_number', true);
+        if (!empty($fallback)) {
+            return preg_replace('/[^0-9+]/', '', (string) $fallback);
+        }
+
+        return '';
     }
 }

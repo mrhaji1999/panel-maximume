@@ -14,6 +14,7 @@ A comprehensive web service bridge plugin for managing user cards, roles, schedu
 - **SMS Integration**: Payamak Panel integration for automated notifications
 - **REST API**: Complete API for external panel integration
 - **Security**: JWT authentication and role-based access control
+- **Wallet & Coupon Forwarding**: Push wallet codes or WooCommerce coupons to destination stores with SMS confirmations
 
 ### Business Logic
 - **Automatic Form Assignment**: Forms are automatically assigned to card supervisors
@@ -46,12 +47,18 @@ A comprehensive web service bridge plugin for managing user cards, roles, schedu
 3. Set up Body IDs for different message types:
    - Normal status code messages
    - Upsell payment messages
+   - Coupon code messages
+   - Wallet code messages
 4. Test the configuration
 
 ### API Settings
-1. Configure CORS allowed origins for external panel
-2. Set payment token expiry time (1-168 hours)
-3. Configure log retention period (1-365 days)
+1. Configure destination authentication (API key or JWT)
+2. Optionally define an HMAC secret for signed requests
+3. Configure coupon defaults (WooCommerce REST credentials or generic endpoint, usage limits, expiry days)
+4. Set the wallet endpoint path for the Woo Wallet Bridge plugin and default wallet expiry
+5. Configure CORS allowed origins for external panel
+6. Set payment token expiry time (1-168 hours)
+7. Configure log retention period (1-365 days)
 
 ### Security Settings
 1. Set webhook secret for secure webhook handling
@@ -114,10 +121,11 @@ Authorization: Bearer YOUR_JWT_TOKEN
 - `POST /reservations` - Create reservation
 - `GET /reservations` - Get reservations
 
-#### Upsell & SMS
+#### Upsell, Wallet & SMS
 - `POST /customers/{id}/upsell/init` - Initialize upsell process
 - `POST /customers/{id}/normal/send-code` - Send normal status code
 - `POST /sms/send` - Send SMS
+- `POST /codes` - Forward wallet or coupon codes to destination store
 
 #### Statistics
 - `GET /stats/dashboard` - Get dashboard statistics

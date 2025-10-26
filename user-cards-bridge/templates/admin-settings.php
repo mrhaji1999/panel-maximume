@@ -14,6 +14,8 @@ if (isset($_POST['submit']) && wp_verify_nonce($_POST['ucb_settings_nonce'], 'uc
     update_option('ucb_sms_password', sanitize_text_field($_POST['ucb_sms_password']));
     update_option('ucb_sms_normal_body_id', sanitize_text_field($_POST['ucb_sms_normal_body_id']));
     update_option('ucb_sms_upsell_body_id', sanitize_text_field($_POST['ucb_sms_upsell_body_id']));
+    update_option('ucb_sms_coupon_body_id', sanitize_text_field($_POST['ucb_sms_coupon_body_id']));
+    update_option('ucb_sms_wallet_body_id', sanitize_text_field($_POST['ucb_sms_wallet_body_id']));
     
     // CORS Settings
     $cors_origins_input = $_POST['ucb_cors_origins'] ?? [];
@@ -25,6 +27,27 @@ if (isset($_POST['submit']) && wp_verify_nonce($_POST['ucb_settings_nonce'], 'uc
     // Other Settings
     update_option('ucb_payment_token_expiry', (int) $_POST['ucb_payment_token_expiry']);
     update_option('ucb_log_retention_days', (int) $_POST['ucb_log_retention_days']);
+
+    $auth_type = isset($_POST['ucb_destination_auth_type']) && in_array($_POST['ucb_destination_auth_type'], ['jwt', 'api_key'], true)
+        ? $_POST['ucb_destination_auth_type']
+        : 'api_key';
+    update_option('ucb_destination_auth_type', $auth_type);
+    update_option('ucb_destination_auth_token', sanitize_text_field($_POST['ucb_destination_auth_token'] ?? ''));
+    update_option('ucb_destination_hmac_secret', sanitize_text_field($_POST['ucb_destination_hmac_secret'] ?? ''));
+
+    $coupon_mode = isset($_POST['ucb_coupon_api_mode']) && in_array($_POST['ucb_coupon_api_mode'], ['woo_rest', 'generic'], true)
+        ? $_POST['ucb_coupon_api_mode']
+        : 'woo_rest';
+    update_option('ucb_coupon_api_mode', $coupon_mode);
+    update_option('ucb_coupon_wc_consumer_key', sanitize_text_field($_POST['ucb_coupon_wc_consumer_key'] ?? ''));
+    update_option('ucb_coupon_wc_consumer_secret', sanitize_text_field($_POST['ucb_coupon_wc_consumer_secret'] ?? ''));
+    update_option('ucb_coupon_generic_endpoint', sanitize_text_field($_POST['ucb_coupon_generic_endpoint'] ?? ''));
+    update_option('ucb_coupon_usage_limit', max(0, (int) ($_POST['ucb_coupon_usage_limit'] ?? 0)));
+    update_option('ucb_coupon_usage_limit_per_user', max(0, (int) ($_POST['ucb_coupon_usage_limit_per_user'] ?? 0)));
+    update_option('ucb_coupon_expiry_days', max(0, (int) ($_POST['ucb_coupon_expiry_days'] ?? 0)));
+
+    update_option('ucb_wallet_endpoint_path', sanitize_text_field($_POST['ucb_wallet_endpoint_path'] ?? ''));
+    update_option('ucb_wallet_code_expiry_days', max(0, (int) ($_POST['ucb_wallet_code_expiry_days'] ?? 0)));
     
     // Webhook secret
     if (!empty($_POST['ucb_webhook_secret'])) {
@@ -39,10 +62,24 @@ $sms_username = get_option('ucb_sms_username', '');
 $sms_password = get_option('ucb_sms_password', '');
 $sms_normal_body_id = get_option('ucb_sms_normal_body_id', '');
 $sms_upsell_body_id = get_option('ucb_sms_upsell_body_id', '');
+$sms_coupon_body_id = get_option('ucb_sms_coupon_body_id', '');
+$sms_wallet_body_id = get_option('ucb_sms_wallet_body_id', '');
 $cors_origins = array_values(array_filter(array_map(['\\UCB\\Security', 'sanitize_origin'], (array) get_option('ucb_cors_allowed_origins', []))));
 $payment_token_expiry = get_option('ucb_payment_token_expiry', 24);
 $log_retention_days = get_option('ucb_log_retention_days', 30);
 $webhook_secret = get_option('ucb_webhook_secret', '');
+$destination_auth_type = get_option('ucb_destination_auth_type', 'api_key');
+$destination_auth_token = get_option('ucb_destination_auth_token', '');
+$destination_hmac_secret = get_option('ucb_destination_hmac_secret', '');
+$coupon_api_mode = get_option('ucb_coupon_api_mode', 'woo_rest');
+$coupon_wc_consumer_key = get_option('ucb_coupon_wc_consumer_key', '');
+$coupon_wc_consumer_secret = get_option('ucb_coupon_wc_consumer_secret', '');
+$coupon_generic_endpoint = get_option('ucb_coupon_generic_endpoint', 'api/coupons');
+$coupon_usage_limit = (int) get_option('ucb_coupon_usage_limit', 1);
+$coupon_usage_limit_per_user = (int) get_option('ucb_coupon_usage_limit_per_user', 1);
+$coupon_expiry_days = (int) get_option('ucb_coupon_expiry_days', 0);
+$wallet_endpoint_path = get_option('ucb_wallet_endpoint_path', 'wp-json/wwb/v1/wallet-codes');
+$wallet_code_expiry_days = (int) get_option('ucb_wallet_code_expiry_days', 0);
 ?>
 
 <div class="wrap">
@@ -100,9 +137,29 @@ $webhook_secret = get_option('ucb_webhook_secret', '');
                             <label for="ucb_sms_upsell_body_id"><?php _e('Upsell Payment Body ID', UCB_TEXT_DOMAIN); ?></label>
                         </th>
                         <td>
-                            <input type="text" id="ucb_sms_upsell_body_id" name="ucb_sms_upsell_body_id" 
+                            <input type="text" id="ucb_sms_upsell_body_id" name="ucb_sms_upsell_body_id"
                                    value="<?php echo esc_attr($sms_upsell_body_id); ?>" class="regular-text" required>
                             <p class="description"><?php _e('Body ID for upsell payment SMS messages.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_sms_coupon_body_id"><?php _e('Coupon Code Body ID', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_sms_coupon_body_id" name="ucb_sms_coupon_body_id"
+                                   value="<?php echo esc_attr($sms_coupon_body_id); ?>" class="regular-text" required>
+                            <p class="description"><?php _e('Body ID used when sending coupon codes to customers.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_sms_wallet_body_id"><?php _e('Wallet Code Body ID', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_sms_wallet_body_id" name="ucb_sms_wallet_body_id"
+                                   value="<?php echo esc_attr($sms_wallet_body_id); ?>" class="regular-text" required>
+                            <p class="description"><?php _e('Body ID used when sending wallet codes to customers.', UCB_TEXT_DOMAIN); ?></p>
                         </td>
                     </tr>
                 </table>
@@ -139,6 +196,127 @@ $webhook_secret = get_option('ucb_webhook_secret', '');
                             <input type="number" id="ucb_log_retention_days" name="ucb_log_retention_days" 
                                    value="<?php echo esc_attr($log_retention_days); ?>" min="1" max="365" class="small-text">
                             <p class="description"><?php _e('How long to keep logs (1-365 days).', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3><?php _e('Destination Authentication', UCB_TEXT_DOMAIN); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_destination_auth_type"><?php _e('Auth Type', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <select id="ucb_destination_auth_type" name="ucb_destination_auth_type">
+                                <option value="api_key" <?php selected($destination_auth_type, 'api_key'); ?>><?php _e('API Key', UCB_TEXT_DOMAIN); ?></option>
+                                <option value="jwt" <?php selected($destination_auth_type, 'jwt'); ?>><?php _e('JWT Bearer', UCB_TEXT_DOMAIN); ?></option>
+                            </select>
+                            <p class="description"><?php _e('Choose how outgoing requests are authenticated with the destination store.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_destination_auth_token"><?php _e('Auth Token / API Key', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_destination_auth_token" name="ucb_destination_auth_token" value="<?php echo esc_attr($destination_auth_token); ?>" class="regular-text">
+                            <p class="description"><?php _e('Shared credential used for Authorization or X-API-Key headers.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_destination_hmac_secret"><?php _e('HMAC Secret (optional)', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_destination_hmac_secret" name="ucb_destination_hmac_secret" value="<?php echo esc_attr($destination_hmac_secret); ?>" class="regular-text">
+                            <p class="description"><?php _e('If provided, requests will include an X-WWB-Signature header.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3><?php _e('Coupon Defaults', UCB_TEXT_DOMAIN); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_api_mode"><?php _e('Coupon API Mode', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <select id="ucb_coupon_api_mode" name="ucb_coupon_api_mode">
+                                <option value="woo_rest" <?php selected($coupon_api_mode, 'woo_rest'); ?>><?php _e('WooCommerce REST API', UCB_TEXT_DOMAIN); ?></option>
+                                <option value="generic" <?php selected($coupon_api_mode, 'generic'); ?>><?php _e('Generic HMAC API', UCB_TEXT_DOMAIN); ?></option>
+                            </select>
+                            <p class="description"><?php _e('Use WooCommerce REST for WordPress stores or Generic for custom endpoints.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_wc_consumer_key"><?php _e('WooCommerce Consumer Key', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_coupon_wc_consumer_key" name="ucb_coupon_wc_consumer_key" value="<?php echo esc_attr($coupon_wc_consumer_key); ?>" class="regular-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_wc_consumer_secret"><?php _e('WooCommerce Consumer Secret', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_coupon_wc_consumer_secret" name="ucb_coupon_wc_consumer_secret" value="<?php echo esc_attr($coupon_wc_consumer_secret); ?>" class="regular-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_generic_endpoint"><?php _e('Generic API Endpoint', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_coupon_generic_endpoint" name="ucb_coupon_generic_endpoint" value="<?php echo esc_attr($coupon_generic_endpoint); ?>" class="regular-text">
+                            <p class="description"><?php _e('Appended to the store link for generic coupon APIs (e.g. api/coupons).', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_usage_limit"><?php _e('Usage Limit', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="ucb_coupon_usage_limit" name="ucb_coupon_usage_limit" value="<?php echo esc_attr($coupon_usage_limit); ?>" min="0" class="small-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_usage_limit_per_user"><?php _e('Usage Limit Per User', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="ucb_coupon_usage_limit_per_user" name="ucb_coupon_usage_limit_per_user" value="<?php echo esc_attr($coupon_usage_limit_per_user); ?>" min="0" class="small-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_coupon_expiry_days"><?php _e('Expiry (days)', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="ucb_coupon_expiry_days" name="ucb_coupon_expiry_days" value="<?php echo esc_attr($coupon_expiry_days); ?>" min="0" class="small-text">
+                            <p class="description"><?php _e('Set to 0 to keep coupons valid indefinitely.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h3><?php _e('Wallet Bridge', UCB_TEXT_DOMAIN); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_wallet_endpoint_path"><?php _e('Wallet Endpoint Path', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_wallet_endpoint_path" name="ucb_wallet_endpoint_path" value="<?php echo esc_attr($wallet_endpoint_path); ?>" class="regular-text">
+                            <p class="description"><?php _e('Defaults to wp-json/wwb/v1/wallet-codes.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_wallet_code_expiry_days"><?php _e('Wallet Code Expiry (days)', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="ucb_wallet_code_expiry_days" name="ucb_wallet_code_expiry_days" value="<?php echo esc_attr($wallet_code_expiry_days); ?>" min="0" class="small-text">
                         </td>
                     </tr>
                 </table>

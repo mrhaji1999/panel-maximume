@@ -16,7 +16,7 @@ class UC_Post_Types {
             'menu_icon' => 'dashicons-screenoptions',
         ]);
 
-        // Register meta for card pricings (array of {label, amount}) and expose via REST
+        // Register meta for card pricings (array of {label, amount, wallet_amount, code_type}) and expose via REST
         if (function_exists('register_post_meta')) {
             register_post_meta('uc_card', '_uc_pricings', [
                 'single' => true,
@@ -29,11 +29,29 @@ class UC_Post_Types {
                             'properties' => [
                                 'label' => ['type' => 'string'],
                                 'amount' => ['type' => 'number'],
+                                'wallet_amount' => ['type' => 'number'],
+                                'code_type' => [
+                                    'type' => 'string',
+                                    'enum' => ['wallet', 'coupon'],
+                                ],
                             ],
                         ],
                     ],
                 ],
                 'sanitize_callback' => ['UC_Post_Types', 'sanitize_pricings'],
+                'auth_callback' => '__return_true',
+            ]);
+
+            register_post_meta('uc_card', '_uc_store_link', [
+                'single' => true,
+                'type' => 'string',
+                'show_in_rest' => [
+                    'schema' => [
+                        'type' => 'string',
+                        'format' => 'uri',
+                    ],
+                ],
+                'sanitize_callback' => ['UC_Post_Types', 'sanitize_store_link'],
                 'auth_callback' => '__return_true',
             ]);
         }
@@ -79,10 +97,25 @@ class UC_Post_Types {
                 if (!is_array($row)) continue;
                 $label = isset($row['label']) ? wp_strip_all_tags((string)$row['label']) : '';
                 $amount = isset($row['amount']) ? floatval($row['amount']) : 0;
-                if ($label === '' && $amount === 0.0) continue;
-                $out[] = ['label' => $label, 'amount' => $amount];
+                $wallet_amount = isset($row['wallet_amount']) ? floatval($row['wallet_amount']) : 0;
+                $code_type = isset($row['code_type']) ? sanitize_key($row['code_type']) : 'wallet';
+                if (!in_array($code_type, ['wallet', 'coupon'], true)) {
+                    $code_type = 'wallet';
+                }
+                if ($label === '' && $amount === 0.0 && $wallet_amount === 0.0) continue;
+                $out[] = [
+                    'label' => $label,
+                    'amount' => $amount,
+                    'wallet_amount' => $wallet_amount,
+                    'code_type' => $code_type,
+                ];
             }
         }
         return $out;
+    }
+
+    public static function sanitize_store_link($value) {
+        $url = esc_url_raw((string) $value);
+        return $url ? $url : '';
     }
 }
