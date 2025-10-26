@@ -431,8 +431,8 @@
         ucSetStep(3);
         $m.find('.uc-step-2 .uc-inline-msg').text('');
         // Ensure datepicker initializes when step 3 becomes visible
-        setTimeout(function(){ initUserSnippet(); }, 0);\n        // When step 3 shows, try to fetch availability if date preselected\n        setTimeout(function(){ ucFetchAvailability(); }, 10);
-      } else {
+        setTimeout(function(){ initUserSnippet(); }, 0);
+		 setTimeout(function(){ ucFetchAvailability(); }, 10);      } else {
         var status = res.data && res.data.status;
         if(status === 'used'){ $m.find('.uc-step-2 .uc-inline-msg').text(UC_Ajax.i18n.usedCode); }
         else { $m.find('.uc-step-2 .uc-inline-msg').text(UC_Ajax.i18n.invalidCode); }
