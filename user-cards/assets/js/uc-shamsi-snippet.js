@@ -141,9 +141,19 @@
     popup.querySelectorAll('.shamsi-calendar-day.is-selectable').forEach(el => {
       el.addEventListener('click', function(){
         const displayValue = this.getAttribute('data-date') || '';
+        const gregorianValue = this.getAttribute('data-gregorian') || '';
         inputField.value = displayValue;
-        inputField.setAttribute('data-gregorian', this.getAttribute('data-gregorian'));
-        try { inputField.dispatchEvent(new Event('change', { bubbles: true })); } catch(e) { var ev = document.createEvent('Event'); ev.initEvent('change', true, false); inputField.dispatchEvent(ev); }
+        inputField.setAttribute('data-gregorian', gregorianValue);
+        inputField.setAttribute('data-jalali', displayValue);
+        try {
+          inputField.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e) {
+          var ev = document.createEvent('Event');
+          ev.initEvent('change', true, false);
+          inputField.dispatchEvent(ev);
+        }
+        // Re-assert the Jalali value after change listeners have run (some convert it back to Gregorian)
+        setTimeout(function(){ inputField.value = displayValue; }, 0);
         popup.style.display = 'none';
       });
     });
@@ -169,6 +179,10 @@
   window.shamsiDatePickerInit = function(){
     document.querySelectorAll('.shamsi-datepicker-field').forEach(field => {
       field.setAttribute('readonly','readonly');
+      var storedJalali = field.getAttribute('data-jalali');
+      if (storedJalali) {
+        field.value = storedJalali;
+      }
       field.addEventListener('click', function(){
         const storedGregorian = this.getAttribute('data-gregorian');
         let baseDate = storedGregorian ? new Date(storedGregorian) : new Date();

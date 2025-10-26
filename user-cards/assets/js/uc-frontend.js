@@ -143,7 +143,10 @@
     var isoDate = isoFull ? isoFull.split('T')[0] : '';
     var $msg = availabilityMessageTarget($m);
     var $summary = $m.find('.uc-availability-summary');
-    var jalaliDisplayValue = ($input.val && $input.val() ? $input.val() : '').toString().trim();
+    var jalaliDisplayValue = ($input.attr('data-jalali') || ($input.val && $input.val() ? $input.val() : '')).toString().trim();
+    if (jalaliDisplayValue) {
+      $input.val(jalaliDisplayValue);
+    }
 
     if (!currentCardId) {
       return;
@@ -387,7 +390,7 @@
     selectedHour = null;
     selectedTimeLabel = '';
     selectedDateIso = '';
-    $('#uc-date-input').val('').attr('data-gregorian','');
+    $('#uc-date-input').val('').attr('data-gregorian','').removeAttr('data-jalali');
     $m.attr('aria-hidden', 'false');
 
     // Attempt early init
