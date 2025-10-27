@@ -3,6 +3,7 @@
   if (window.shamsiDatePickerInit) return;
 
   const weekDays = ["ش","ی","د","س","چ","پ","ج"];
+  const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
   const jalaali = (function(){
     const monthNames = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
@@ -106,26 +107,7 @@
       return toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     }
 
-    function isLeapJalaaliYear(jy) {
-      // Algorithm derived from "Calendrical Calculations" for the Jalali calendar
-      const mod = ((jy - (jy > 0 ? 474 : 473)) % 2820) + 474;
-      return (((mod + 38) * 682) % 2816) < 682;
-    }
-
-    function getJalaaliMonthLength(jy, jm) {
-      if (jm <= 6) return 31;
-      if (jm <= 11) return 30;
-      return isLeapJalaaliYear(jy) ? 30 : 29;
-    }
-
-    return {
-      toJalaali: toJalaali,
-      fromDate: fromDate,
-      toGregorian: toGregorian,
-      monthNames: monthNames,
-      isLeapJalaaliYear: isLeapJalaaliYear,
-      getJalaaliMonthLength: getJalaaliMonthLength
-    };
+    return { toJalaali: toJalaali, fromDate: fromDate, toGregorian: toGregorian, monthNames: monthNames };
   })();
 
   function formatJalaaliDate(jy, jm, jd) {
@@ -198,7 +180,7 @@
     const nextMonthDate = new Date(nextMonthParts[0], nextMonthParts[1] - 1, nextMonthParts[2]);
     nextMonthDate.setHours(0,0,0,0);
 
-    const monthLength = jalaali.getJalaaliMonthLength(shYear, shMonthIndex);
+    const monthLength = Math.round((nextMonthDate.getTime() - monthStart.getTime()) / DAY_IN_MS);
     const days = [];
     for (let day = 1; day <= monthLength; day++) {
       const currentParts = jalaali.toGregorian(shYear, shMonthIndex, day);
@@ -250,8 +232,7 @@
     const monthContext = getJalaliMonthContext(viewDate);
     const { shYear, shMonthIndex, shMonthName, monthStart, days, prevMonthDate, nextMonthDate } = monthContext;
     const firstDayOffset = (monthStart.getDay() + 1) % 7; // Saturday=0
-    const todayGregorian = new Date();
-    const todayAtMidnight = new Date(todayGregorian.getFullYear(), todayGregorian.getMonth(), todayGregorian.getDate());
+    const todayAtMidnight = new Date();
     todayAtMidnight.setHours(0,0,0,0);
 
     let body = '<div class="shamsi-calendar-body">';
@@ -260,7 +241,7 @@
 
     days.forEach(dayEntry => {
       const dayDate = dayEntry.gregorian;
-      const isToday = dayDate.toDateString() === todayGregorian.toDateString();
+      const isToday = dayDate.getTime() === todayAtMidnight.getTime();
       const midnightDate = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
       midnightDate.setHours(0,0,0,0);
       const isSelectable = midnightDate.getTime() >= todayAtMidnight.getTime();
