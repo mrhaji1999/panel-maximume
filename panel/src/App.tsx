@@ -17,6 +17,7 @@ import { CustomersPage } from '@/pages/customers'
 import { SupervisorsPage } from '@/pages/supervisors'
 import { AgentsPage } from '@/pages/agents'
 import { MyCardsPage } from '@/pages/my-cards'
+import { AssignCustomersPage } from '@/pages/assign-customers'
 import { MyAgentsPage } from '@/pages/my-agents'
 import { MyCustomersPage } from '@/pages/my-customers'
 import { AssignedCustomersPage } from '@/pages/assigned-customers'
@@ -193,6 +194,16 @@ export default function App() {
             <ProtectedRoute allowedRoles={['supervisor']}>
               <MainLayout>
                 <MyCustomersPage />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/assign-customers"
+          element={
+            <ProtectedRoute allowedRoles={['supervisor']}>
+              <MainLayout>
+                <AssignCustomersPage />
               </MainLayout>
             </ProtectedRoute>
           }

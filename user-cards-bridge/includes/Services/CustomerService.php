@@ -70,6 +70,14 @@ class CustomerService {
             ];
         }
 
+        if (!empty($filters['card_id_in'])) {
+            $args['meta_query'][] = [
+                'key' => '_uc_card_id',
+                'value' => $filters['card_id_in'],
+                'compare' => 'IN',
+            ];
+        }
+
         if (!empty($filters['supervisor_id'])) {
             $args['meta_query'][] = [
                 'key' => '_uc_supervisor_id',
@@ -220,6 +228,14 @@ class CustomerService {
                 'key' => '_uc_card_id',
                 'value' => (int) $filters['card_id'],
                 'compare' => '=',
+            ];
+        }
+
+        if (!empty($filters['card_id_in'])) {
+            $args['meta_query'][] = [
+                'key' => '_uc_card_id',
+                'value' => $filters['card_id_in'],
+                'compare' => 'IN',
             ];
         }
 
@@ -822,10 +838,12 @@ class CustomerService {
     /**
      * Assign agent to customer.
      */
-    public function assign_agent(int $customer_id, int $agent_id, ?int $card_id = null): void {
+    public function assign_agent(int $customer_id, int $agent_id, ?int $card_id = null, ?int $submission_id = null): void {
         update_user_meta($customer_id, 'ucb_customer_assigned_agent', $agent_id);
 
-        if (null !== $card_id && $card_id > 0) {
+        if (null !== $submission_id && $submission_id > 0) {
+             update_post_meta($submission_id, '_uc_agent_id', $agent_id);
+        } elseif (null !== $card_id && $card_id > 0) {
             $this->card_repository->update_agent($customer_id, $card_id, $agent_id);
             $this->update_forms_meta($customer_id, '_uc_agent_id', $agent_id, $card_id);
         } else {
