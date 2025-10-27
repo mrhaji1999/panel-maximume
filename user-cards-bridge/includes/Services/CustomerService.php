@@ -26,12 +26,21 @@ class CustomerService {
      * @return array{items: array<int, array<string, mixed>>, total: int}
      */
     public function list_customers(array $filters, int $page = 1, int $per_page = 20): array {
+        $allowed_customer_ids = $this->get_customer_ids_from_forms($filters);
+
+        if (empty($allowed_customer_ids)) {
+            return [
+                'items' => [],
+                'total' => 0,
+            ];
+        }
+
         $meta_query_clauses = [];
 
         $status_filter = !empty($filters['status']) ? sanitize_key($filters['status']) : null;
 
         if ('unassigned' === $status_filter) {
-            return $this->list_unassigned_customers($filters, $page, $per_page);
+            return $this->list_unassigned_customers($filters, $page, $per_page, $allowed_customer_ids);
         }
 
         if ($status_filter) {
@@ -73,6 +82,8 @@ class CustomerService {
             'order'      => 'DESC',
             'meta_query' => $meta_query,
             'role__in'   => ['customer'],
+            'include'    => $allowed_customer_ids,
+            'count_total'=> true,
         ];
 
         if (!empty($filters['order'])) {
@@ -99,6 +110,19 @@ class CustomerService {
             $search = sanitize_text_field($filters['search']);
             $args['search'] = '*' . $search . '*';
             $args['search_columns'] = ['user_login', 'user_email', 'display_name'];
+            $meta_query_clauses[] = [
+                'relation' => 'OR',
+                [
+                    'key'     => 'ucb_customer_email',
+                    'value'   => $search,
+                    'compare' => 'LIKE',
+                ],
+                [
+                    'key'     => 'ucb_customer_phone',
+                    'value'   => $search,
+                    'compare' => 'LIKE',
+                ],
+            ];
         }
 
         $query = new WP_User_Query($args);
@@ -119,7 +143,10 @@ class CustomerService {
      * @param array<string, mixed> $filters
      * @return array{items: array<int, array<string, mixed>>, total: int}
      */
-    private function list_unassigned_customers(array $filters, int $page, int $per_page): array {
+    /**
+     * @param array<int> $allowed_customer_ids
+     */
+    private function list_unassigned_customers(array $filters, int $page, int $per_page, array $allowed_customer_ids): array {
         global $wpdb;
 
         $joins = [];
@@ -138,6 +165,19 @@ class CustomerService {
 
         $joins[] = "LEFT JOIN {$wpdb->usermeta} status_meta ON status_meta.user_id = users.ID AND status_meta.meta_key = 'ucb_customer_status'";
         $where[] = "(status_meta.meta_value IS NULL OR status_meta.meta_value = '' OR status_meta.meta_value = 'unassigned')";
+
+        if (!empty($allowed_customer_ids)) {
+            $placeholders = implode(',', array_fill(0, count($allowed_customer_ids), '%d'));
+            $where[] = "users.ID IN ($placeholders)";
+            foreach ($allowed_customer_ids as $customer_id) {
+                $params[] = (int) $customer_id;
+            }
+        } else {
+            return [
+                'items' => [],
+                'total' => 0,
+            ];
+        }
 
         if (!empty($filters['card_id'])) {
             $joins[] = "INNER JOIN {$wpdb->usermeta} card_meta ON card_meta.user_id = users.ID AND card_meta.meta_key = 'ucb_customer_card_id'";
@@ -159,7 +199,11 @@ class CustomerService {
 
         if (!empty($filters['search'])) {
             $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
-            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} email_meta ON email_meta.user_id = users.ID AND email_meta.meta_key = 'ucb_customer_email'";
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} phone_meta ON phone_meta.user_id = users.ID AND phone_meta.meta_key = 'ucb_customer_phone'";
+            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s OR email_meta.meta_value LIKE %s OR phone_meta.meta_value LIKE %s)';
+            $params[] = $search;
+            $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
@@ -242,6 +286,20 @@ class CustomerService {
             $filters['agent_id'] = $user_id;
         }
 
+        $allowed_customer_ids = $this->get_customer_ids_from_forms($filters);
+
+        if (empty($allowed_customer_ids)) {
+            $status_manager = new StatusManager();
+            $counts = [];
+            foreach (array_keys($status_manager->get_statuses()) as $status) {
+                $counts[$status] = 0;
+            }
+
+            ksort($counts);
+
+            return $counts;
+        }
+
         $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
         $role_join = $wpdb->prepare(
             "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = status_meta.user_id AND role_meta.meta_key = %s",
@@ -283,7 +341,11 @@ class CustomerService {
 
         if (!empty($filters['search'])) {
             $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
-            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} email_meta ON email_meta.user_id = users.ID AND email_meta.meta_key = 'ucb_customer_email'";
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} phone_meta ON phone_meta.user_id = users.ID AND phone_meta.meta_key = 'ucb_customer_phone'";
+            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s OR email_meta.meta_value LIKE %s OR phone_meta.meta_value LIKE %s)';
+            $params[] = $search;
+            $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
@@ -295,6 +357,12 @@ class CustomerService {
                 $where[] = 'DATE(users.user_registered) = %s';
                 $params[] = $date;
             }
+        }
+
+        $placeholders = implode(',', array_fill(0, count($allowed_customer_ids), '%d'));
+        $where[] = "status_meta.user_id IN ($placeholders)";
+        foreach ($allowed_customer_ids as $customer_id) {
+            $params[] = (int) $customer_id;
         }
 
         $sql = "SELECT status_meta.meta_value AS status, COUNT(*) AS total
@@ -363,7 +431,7 @@ class CustomerService {
         return [
             'id'                        => $user_id,
             'username'                 => $user->user_login,
-            'email'                    => $user->user_email,
+            'email'                    => $this->get_customer_email($user_id),
             'first_name'               => $user->first_name,
             'last_name'                => $user->last_name,
             'display_name'             => $user->display_name,
@@ -385,6 +453,25 @@ class CustomerService {
             'form_data'                => $form_data,
             'form_schedule'            => $submission_data['schedule'],
         ];
+    }
+
+    /**
+     * Retrieve stored email for customer.
+     */
+    protected function get_customer_email(int $user_id): ?string {
+        $email = get_user_meta($user_id, 'ucb_customer_email', true);
+
+        if (is_string($email) && $email !== '') {
+            return sanitize_email($email) ?: $email;
+        }
+
+        $user = get_user_by('id', $user_id);
+
+        if ($user instanceof WP_User) {
+            return $user->user_email ?: null;
+        }
+
+        return null;
     }
 
     /**
@@ -581,6 +668,70 @@ class CustomerService {
         }
 
         return [];
+    }
+
+    /**
+     * Fetch customer user IDs that have at least one form submission matching filters.
+     *
+     * @param array<string, mixed> $filters
+     * @return array<int>
+     */
+    private function get_customer_ids_from_forms(array $filters): array {
+        global $wpdb;
+
+        $posts_table = $wpdb->posts;
+        $meta_table = $wpdb->postmeta;
+
+        $joins = [
+            "INNER JOIN {$meta_table} form_user ON form_user.post_id = posts.ID AND form_user.meta_key = '_uc_user_id'",
+        ];
+
+        $where = [
+            "posts.post_type = 'uc_submission'",
+            "posts.post_status NOT IN ('trash', 'auto-draft')",
+        ];
+
+        $params = [];
+
+        if (!empty($filters['card_id'])) {
+            $joins[] = "INNER JOIN {$meta_table} form_card ON form_card.post_id = posts.ID AND form_card.meta_key = '_uc_card_id'";
+            $where[] = 'CAST(form_card.meta_value AS UNSIGNED) = %d';
+            $params[] = (int) $filters['card_id'];
+        }
+
+        if (!empty($filters['supervisor_id'])) {
+            $joins[] = "INNER JOIN {$meta_table} form_supervisor ON form_supervisor.post_id = posts.ID AND form_supervisor.meta_key = '_uc_supervisor_id'";
+            $where[] = 'CAST(form_supervisor.meta_value AS UNSIGNED) = %d';
+            $params[] = (int) $filters['supervisor_id'];
+        }
+
+        if (!empty($filters['agent_id'])) {
+            $joins[] = "INNER JOIN {$meta_table} form_agent ON form_agent.post_id = posts.ID AND form_agent.meta_key = '_uc_agent_id'";
+            $where[] = 'CAST(form_agent.meta_value AS UNSIGNED) = %d';
+            $params[] = (int) $filters['agent_id'];
+        }
+
+        if (!empty($filters['registered_date'])) {
+            $date = sanitize_text_field((string) $filters['registered_date']);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $where[] = 'DATE(posts.post_date) = %s';
+                $params[] = $date;
+            }
+        }
+
+        $sql = "SELECT DISTINCT CAST(form_user.meta_value AS UNSIGNED) AS user_id
+                FROM {$posts_table} posts " . implode(' ', array_unique($joins)) . "
+                WHERE " . implode(' AND ', $where);
+
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, ...$params);
+        }
+
+        $ids = array_map('intval', (array) $wpdb->get_col($sql));
+
+        return array_values(array_filter($ids, function ($id) {
+            return $id > 0;
+        }));
     }
 
     private function resolve_form_label($key, $value): string {

@@ -141,11 +141,19 @@ class ReservationService {
         $supervisor = $supervisor_id ? get_user_by('id', $supervisor_id) : null;
         $card = $card_id ? get_post($card_id) : null;
 
+        $customer_email = null;
+        if ($customer_id) {
+            $email_meta = get_user_meta($customer_id, 'ucb_customer_email', true);
+            if (is_string($email_meta) && $email_meta !== '') {
+                $customer_email = sanitize_email($email_meta) ?: $email_meta;
+            }
+        }
+
         return [
             'id' => $reservation_id,
             'customer_id' => $customer_id,
             'customer_name' => $customer ? $customer->display_name : null,
-            'customer_email' => $customer ? $customer->user_email : null,
+            'customer_email' => $customer_email ?: ($customer ? $customer->user_email : null),
             'card_id' => $card_id,
             'card_title' => $card ? get_the_title($card) : null,
             'supervisor_id' => $supervisor_id,

@@ -233,9 +233,20 @@ class Users extends BaseController {
         
         // Get customers count
         $customers_query = new \WP_User_Query([
-            'meta_key' => 'ucb_customer_supervisor_id',
-            'meta_value' => $supervisor_id,
             'role' => 'customer',
+            'meta_query' => [
+                'relation' => 'OR',
+                [
+                    'key' => 'ucb_customer_assigned_supervisor',
+                    'value' => $supervisor_id,
+                    'compare' => '=',
+                ],
+                [
+                    'key' => 'ucb_customer_supervisor_id',
+                    'value' => $supervisor_id,
+                    'compare' => '=',
+                ],
+            ],
         ]);
         $formatted_user['customers_count'] = $customers_query->get_total();
 
@@ -262,9 +273,20 @@ class Users extends BaseController {
         
         // Get customers count
         $customers_query = new \WP_User_Query([
-            'meta_key' => 'ucb_customer_agent_id',
-            'meta_value' => $agent_id,
             'role' => 'customer',
+            'meta_query' => [
+                'relation' => 'OR',
+                [
+                    'key' => 'ucb_customer_assigned_agent',
+                    'value' => $agent_id,
+                    'compare' => '=',
+                ],
+                [
+                    'key' => 'ucb_customer_agent_id',
+                    'value' => $agent_id,
+                    'compare' => '=',
+                ],
+            ],
         ]);
         $formatted_user['customers_count'] = $customers_query->get_total();
 
