@@ -109,6 +109,8 @@ export function CustomerManagementView({
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>(defaultStatus)
   const [page, setPage] = useState(1)
 
+  const baseFiltersKey = useMemo(() => JSON.stringify(baseFilters ?? {}), [baseFilters])
+
   const [noteDialogCustomer, setNoteDialogCustomer] = useState<Customer | null>(null)
   const [assignmentDialog, setAssignmentDialog] = useState<{
     type: 'supervisor' | 'agent'
@@ -166,7 +168,7 @@ export function CustomerManagementView({
 
   useEffect(() => {
     setPage(1)
-  }, [selectedStatus, debouncedSearch, baseFilters])
+  }, [selectedStatus, debouncedSearch, baseFiltersKey])
 
   const normalizedBaseFilters = useMemo(() => {
     const entries = Object.entries(baseFilters ?? {})
@@ -176,7 +178,7 @@ export function CustomerManagementView({
       }
       return accumulator
     }, {})
-  }, [baseFilters])
+  }, [baseFiltersKey])
 
   const apiFilters = useMemo(() => {
     const params: Record<string, string | number> = {
@@ -709,13 +711,11 @@ function CustomerRow({
     }
     return rawScheduleDate
   }, [rawScheduleDate])
-  const scheduleDate = customer.form_schedule?.date ?? ''
   const callLabel = scheduleTime
     ? `تماس در ساعت ${scheduleTime}${scheduleDate ? ` (${scheduleDate})` : ''}`
     : scheduleDate
       ? `تماس در تاریخ ${scheduleDate}`
       : 'تماس'
-  const sanitizedPhone = customer.phone ? customer.phone.replace(/\s+/g, '') : ''
 
   const {
     data: cardFields = [],
