@@ -320,6 +320,11 @@
           baseDate = new Date();
         }
         baseDate.setHours(0,0,0,0);
+        const todayAtMidnight = new Date();
+        todayAtMidnight.setHours(0,0,0,0);
+        if (baseDate.getTime() < todayAtMidnight.getTime()) {
+          baseDate = new Date(todayAtMidnight.getTime());
+        }
         renderShamsiCalendar(this.id, baseDate);
       });
     });
