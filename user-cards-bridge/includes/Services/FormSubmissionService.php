@@ -6,6 +6,7 @@ use UCB\Database;
 use UCB\Logger;
 use UCB\Services\StatusManager;
 use WP_Error;
+use WP_User;
 
 /**
  * Handles form submissions from user-cards plugin
@@ -130,7 +131,7 @@ class FormSubmissionService {
     protected function create_customer($customer_data) {
         // Check if customer already exists by email
         $existing_customer = get_user_by('email', $customer_data['email']);
-        
+
         if ($existing_customer) {
             $customer_id = $existing_customer->ID;
         } else {
@@ -140,30 +141,81 @@ class FormSubmissionService {
                 wp_generate_password(),
                 $customer_data['email']
             );
-            
+
             if (is_wp_error($user_id)) {
                 return $user_id;
             }
-            
+
             $customer_id = $user_id;
-            
-            // Update user data
-            wp_update_user([
-                'ID' => $customer_id,
-                'first_name' => $customer_data['first_name'],
-                'last_name' => $customer_data['last_name'],
-                'display_name' => $customer_data['first_name'] . ' ' . $customer_data['last_name']
-            ]);
         }
-        
-        // Store customer-specific data
+
+        $this->update_customer_profile($customer_id, $customer_data);
+
+        return $customer_id;
+    }
+
+    /**
+     * Ensure the WordPress user reflects the latest submission data.
+     */
+    protected function update_customer_profile(int $customer_id, array $customer_data): void {
+        $user_update = ['ID' => $customer_id];
+
+        if ('' !== $customer_data['first_name']) {
+            $user_update['first_name'] = $customer_data['first_name'];
+        }
+
+        if ('' !== $customer_data['last_name']) {
+            $user_update['last_name'] = $customer_data['last_name'];
+        }
+
+        $display_name = trim($customer_data['first_name'] . ' ' . $customer_data['last_name']);
+        if ('' !== $display_name) {
+            $user_update['display_name'] = $display_name;
+        }
+
+        if (count($user_update) > 1) {
+            wp_update_user($user_update);
+        }
+
+        $this->ensure_customer_role($customer_id);
+
+        // Store customer-specific data used across the panel
         update_user_meta($customer_id, 'ucb_customer_status', $customer_data['status']);
-        update_user_meta($customer_id, 'ucb_customer_card_id', $customer_data['card_id']);
-        update_user_meta($customer_id, 'ucb_customer_supervisor_id', $customer_data['supervisor_id']);
+        update_user_meta($customer_id, 'ucb_customer_card_id', (int) $customer_data['card_id']);
+
+        $supervisor_id = (int) $customer_data['supervisor_id'];
+        update_user_meta($customer_id, 'ucb_customer_assigned_supervisor', $supervisor_id);
+        // Maintain legacy meta key for backwards compatibility
+        update_user_meta($customer_id, 'ucb_customer_supervisor_id', $supervisor_id);
+
         update_user_meta($customer_id, 'ucb_customer_phone', $customer_data['phone']);
         update_user_meta($customer_id, 'ucb_customer_form_data', $customer_data['form_data']);
-        
-        return $customer_id;
+    }
+
+    /**
+     * Guarantee that the created user is treated as a customer inside WordPress.
+     */
+    protected function ensure_customer_role(int $customer_id): void {
+        $user = get_user_by('id', $customer_id);
+        if (!$user instanceof WP_User) {
+            return;
+        }
+
+        $roles = (array) $user->roles;
+
+        if (empty($roles)) {
+            $user->set_role('customer');
+            return;
+        }
+
+        if (1 === count($roles) && in_array('subscriber', $roles, true)) {
+            $user->set_role('customer');
+            return;
+        }
+
+        if (!in_array('customer', $roles, true)) {
+            $user->add_role('customer');
+        }
     }
     
     /**
@@ -201,17 +253,28 @@ class FormSubmissionService {
      * Get form submissions for a supervisor
      */
     public function get_supervisor_forms($supervisor_id, $filters = []) {
-        $args = [
-            'role' => 'customer',
-            'meta_query' => [
+        $meta_query = [
+            'relation' => 'AND',
+            [
+                'relation' => 'OR',
+                [
+                    'key' => 'ucb_customer_assigned_supervisor',
+                    'value' => $supervisor_id,
+                    'compare' => '=',
+                ],
                 [
                     'key' => 'ucb_customer_supervisor_id',
                     'value' => $supervisor_id,
-                    'compare' => '='
-                ]
-            ]
+                    'compare' => '=',
+                ],
+            ],
         ];
-        
+
+        $args = [
+            'role' => 'customer',
+            'meta_query' => $meta_query,
+        ];
+
         if (!empty($filters['status'])) {
             $args['meta_query'][] = [
                 'key' => 'ucb_customer_status',
