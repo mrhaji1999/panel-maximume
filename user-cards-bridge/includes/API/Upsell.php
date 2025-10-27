@@ -102,7 +102,7 @@ class Upsell extends BaseController {
             'field_label'=> $selected['label'],
             'amount'     => (float) $selected['amount'],
             'pay_link'   => $order['pay_link'],
-        ]);
+        ], $card_id);
 
         return $this->success([
             'order_id'  => $order['order_id'],
@@ -115,17 +115,17 @@ class Upsell extends BaseController {
 
     public function send_normal_code(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
-        
-        // Change status to normal (this will trigger code generation and SMS)
-        $result = $this->statuses->change_status($customer_id, 'normal', get_current_user_id());
-        
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
+
+        $result = $this->statuses->change_status($customer_id, 'normal', get_current_user_id(), [], $card_id);
+
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);
         }
-        
-        // Get the generated code
-        $random_code = get_user_meta($customer_id, 'ucb_customer_random_code', true);
-        
+
+        $random_code = $this->customers->format_customer($this->customers->get_customer($customer_id), $card_id)['random_code'] ?? null;
+
         return $this->success([
             'message' => __('Random code sent to customer.', 'user-cards-bridge'),
             'code' => $random_code,
@@ -135,6 +135,8 @@ class Upsell extends BaseController {
 
     public function require_customer_access(WP_REST_Request $request): bool {
         $customer_id = (int) $request->get_param('id');
-        return is_user_logged_in() && Security::can_manage_customer($customer_id);
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
+        return is_user_logged_in() && Security::can_manage_customer($customer_id, $card_id);
     }
 }

@@ -134,13 +134,15 @@ class Customers extends BaseController {
 
     public function get_customer(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
         $customer = $this->customers->get_customer($customer_id);
 
         if (!$customer) {
             return $this->error('ucb_customer_not_found', __('Customer not found.', 'user-cards-bridge'), 404);
         }
 
-        $data = $this->customers->format_customer($customer);
+        $data = $this->customers->format_customer($customer, $card_id);
         $data['notes'] = $this->customers->get_notes($customer_id);
         $data['statuses'] = $this->statuses->get_statuses();
 
@@ -151,12 +153,14 @@ class Customers extends BaseController {
         $customer_id = (int) $request->get_param('id');
         $status = sanitize_key($request->get_param('status'));
         $meta = (array) $request->get_param('meta');
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
 
-        if (!Security::can_manage_customer($customer_id)) {
+        if (!Security::can_manage_customer($customer_id, $card_id)) {
             return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
         }
 
-        $change_result = $this->statuses->change_status($customer_id, $status, get_current_user_id(), $meta);
+        $change_result = $this->statuses->change_status($customer_id, $status, get_current_user_id(), $meta, $card_id);
 
         if (is_wp_error($change_result)) {
             return $this->from_wp_error($change_result);
@@ -168,7 +172,7 @@ class Customers extends BaseController {
         ];
 
         if ('normal' === $status && $response['changed']) {
-            $send_result = $this->send_normal_code_internal($customer_id);
+            $send_result = $this->send_normal_code_internal($customer_id, $card_id);
 
             if (is_wp_error($send_result)) {
                 return $this->from_wp_error($send_result);
@@ -198,6 +202,8 @@ class Customers extends BaseController {
 
     public function assign_supervisor(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
         $supervisor_id = (int) $request->get_param('supervisor_id');
 
         $supervisor = $this->users->ensure_role($supervisor_id, ['supervisor']);
@@ -205,7 +211,7 @@ class Customers extends BaseController {
             return $this->from_wp_error($supervisor);
         }
 
-        $this->customers->assign_supervisor($customer_id, $supervisor_id);
+        $this->customers->assign_supervisor($customer_id, $supervisor_id, $card_id);
 
         return $this->success([
             'customer_id' => $customer_id,
@@ -215,6 +221,8 @@ class Customers extends BaseController {
 
     public function assign_agent(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
         $agent_id = (int) $request->get_param('agent_id');
 
         $role = Roles::get_user_role(get_current_user_id());
@@ -228,7 +236,7 @@ class Customers extends BaseController {
             return $this->from_wp_error($agent);
         }
 
-        $this->customers->assign_agent($customer_id, $agent_id);
+        $this->customers->assign_agent($customer_id, $agent_id, $card_id);
 
         return $this->success([
             'customer_id' => $customer_id,
@@ -238,12 +246,14 @@ class Customers extends BaseController {
 
     public function send_normal_code(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
-        
-        if (!Security::can_manage_customer($customer_id)) {
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
+
+        if (!Security::can_manage_customer($customer_id, $card_id)) {
             return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
         }
 
-        $result = $this->notifications->send_normal_code($customer_id);
+        $result = $this->notifications->send_normal_code($customer_id, $card_id);
         
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);
@@ -252,8 +262,8 @@ class Customers extends BaseController {
         return $this->success($result);
     }
 
-    protected function send_normal_code_internal(int $customer_id) {
-        return $this->notifications->send_normal_code($customer_id);
+    protected function send_normal_code_internal(int $customer_id, ?int $card_id = null) {
+        return $this->notifications->send_normal_code($customer_id, $card_id);
     }
 
     public function require_access(WP_REST_Request $request): bool {
@@ -266,7 +276,9 @@ class Customers extends BaseController {
 
     public function require_customer_access(WP_REST_Request $request): bool {
         $customer_id = (int) $request->get_param('id');
-        return $this->require_access($request) && Security::can_manage_customer($customer_id);
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
+        return $this->require_access($request) && Security::can_manage_customer($customer_id, $card_id);
     }
 
     public function require_manager(WP_REST_Request $request): bool {

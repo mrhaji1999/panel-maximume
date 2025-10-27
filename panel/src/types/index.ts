@@ -18,6 +18,8 @@ export type UserRole = 'company_manager' | 'supervisor' | 'agent'
 // Customer types
 export interface Customer {
   id: number
+  customer_id?: number
+  entry_id?: number | null
   username: string
   email: string
   first_name: string

@@ -10,11 +10,21 @@ use WP_User_Query;
  * Customer domain helpers.
  */
 class CustomerService {
+    private CustomerCardRepository $card_repository;
+
+    public function __construct() {
+        $this->card_repository = new CustomerCardRepository();
+    }
+
     /**
      * Fetch customer user.
      */
     public function get_customer(int $customer_id): ?WP_User {
         $user = get_user_by('id', $customer_id);
+
+        if ($user instanceof WP_User) {
+            $this->card_repository->ensure_legacy_migrated($customer_id);
+        }
 
         return $user ?: null;
     }
@@ -35,55 +45,13 @@ class CustomerService {
             ];
         }
 
-        $meta_query_clauses = [];
-
-        $status_filter = !empty($filters['status']) ? sanitize_key($filters['status']) : null;
-
-        if ('unassigned' === $status_filter) {
-            return $this->list_unassigned_customers($filters, $page, $per_page, $allowed_customer_ids);
-        }
-
-        if ($status_filter) {
-            $meta_query_clauses[] = [
-                'key'   => 'ucb_customer_status',
-                'value' => $status_filter,
-            ];
-        }
-
-        if (!empty($filters['card_id'])) {
-            $meta_query_clauses[] = [
-                'key'   => 'ucb_customer_card_id',
-                'value' => (int) $filters['card_id'],
-            ];
-        }
-
-        if (!empty($filters['supervisor_id'])) {
-            $meta_query_clauses[] = [
-                'key'   => 'ucb_customer_assigned_supervisor',
-                'value' => (int) $filters['supervisor_id'],
-            ];
-        }
-
-        if (!empty($filters['agent_id'])) {
-            $meta_query_clauses[] = [
-                'key'   => 'ucb_customer_assigned_agent',
-                'value' => (int) $filters['agent_id'],
-            ];
-        }
-
-        $meta_query = empty($meta_query_clauses)
-            ? []
-            : array_merge(['relation' => 'AND'], $meta_query_clauses);
-
         $args = [
-            'number'     => $per_page,
-            'paged'      => $page,
+            'number'     => -1,
             'orderby'    => 'registered',
             'order'      => 'DESC',
-            'meta_query' => $meta_query,
             'role__in'   => ['customer'],
             'include'    => $allowed_customer_ids,
-            'count_total'=> true,
+            'fields'     => 'all_with_meta',
         ];
 
         if (!empty($filters['order'])) {
@@ -114,13 +82,69 @@ class CustomerService {
 
         $query = new WP_User_Query($args);
 
-        $items = array_map(function (WP_User $user) {
-            return $this->format_customer($user);
-        }, $query->get_results());
+        $status_filter = !empty($filters['status']) ? sanitize_key($filters['status']) : null;
+        $card_filter = !empty($filters['card_id']) ? (int) $filters['card_id'] : null;
+        $supervisor_filter = !empty($filters['supervisor_id']) ? (int) $filters['supervisor_id'] : null;
+        $agent_filter = !empty($filters['agent_id']) ? (int) $filters['agent_id'] : null;
+
+        $entries = [];
+
+        foreach ($query->get_results() as $user) {
+            if (!$user instanceof WP_User) {
+                continue;
+            }
+
+            $customer_id = (int) $user->ID;
+            $this->card_repository->ensure_legacy_migrated($customer_id);
+            $cards = $this->get_customer_cards_map($customer_id);
+
+            foreach ($cards as $card_id => $card_meta) {
+                if ($card_filter && $card_filter !== $card_id) {
+                    continue;
+                }
+
+                $status = isset($card_meta['status']) && $card_meta['status'] !== ''
+                    ? sanitize_key($card_meta['status'])
+                    : 'unassigned';
+
+                if ($status_filter && $status_filter !== $status) {
+                    continue;
+                }
+
+                $assigned_supervisor = (int) ($card_meta['supervisor_id'] ?? 0);
+                if ($supervisor_filter && $supervisor_filter !== $assigned_supervisor) {
+                    continue;
+                }
+
+                $assigned_agent = (int) ($card_meta['agent_id'] ?? 0);
+                if ($agent_filter && $agent_filter !== $assigned_agent) {
+                    continue;
+                }
+
+                $entries[] = $this->format_customer_for_card($user, $card_id, $card_meta);
+            }
+        }
+
+        $order = $args['order'] ?? 'DESC';
+        usort($entries, function (array $a, array $b) use ($order) {
+            $left = $a['registered_at'] ?? '';
+            $right = $b['registered_at'] ?? '';
+            if ($left === $right) {
+                return 0;
+            }
+
+            return 'ASC' === $order
+                ? strcmp($left, $right)
+                : strcmp($right, $left);
+        });
+
+        $total = count($entries);
+        $offset = max(0, ($page - 1) * $per_page);
+        $items = array_slice($entries, $offset, $per_page);
 
         return [
             'items' => $items,
-            'total' => (int) $query->get_total(),
+            'total' => $total,
         ];
     }
 
@@ -130,116 +154,6 @@ class CustomerService {
      * @param array<string, mixed> $filters
      * @return array{items: array<int, array<string, mixed>>, total: int}
      */
-    /**
-     * @param array<int> $allowed_customer_ids
-     */
-    private function list_unassigned_customers(array $filters, int $page, int $per_page, array $allowed_customer_ids): array {
-        global $wpdb;
-
-        $joins = [];
-        $where = ['1=1'];
-        $params = [];
-
-        $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
-        $role_join = $wpdb->prepare(
-            "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = users.ID AND role_meta.meta_key = %s",
-            $capabilities_key
-        );
-
-        $joins[] = $role_join;
-        $where[] = 'role_meta.meta_value LIKE %s';
-        $params[] = '%' . $wpdb->esc_like('"customer"') . '%';
-
-        $joins[] = "LEFT JOIN {$wpdb->usermeta} status_meta ON status_meta.user_id = users.ID AND status_meta.meta_key = 'ucb_customer_status'";
-        $where[] = "(status_meta.meta_value IS NULL OR status_meta.meta_value = '' OR status_meta.meta_value = 'unassigned')";
-
-        if (!empty($allowed_customer_ids)) {
-            $placeholders = implode(',', array_fill(0, count($allowed_customer_ids), '%d'));
-            $where[] = "users.ID IN ($placeholders)";
-            foreach ($allowed_customer_ids as $customer_id) {
-                $params[] = (int) $customer_id;
-            }
-        } else {
-            return [
-                'items' => [],
-                'total' => 0,
-            ];
-        }
-
-        if (!empty($filters['card_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} card_meta ON card_meta.user_id = users.ID AND card_meta.meta_key = 'ucb_customer_card_id'";
-            $where[] = 'card_meta.meta_value = %d';
-            $params[] = (int) $filters['card_id'];
-        }
-
-        if (!empty($filters['supervisor_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} supervisor_meta ON supervisor_meta.user_id = users.ID AND supervisor_meta.meta_key = 'ucb_customer_assigned_supervisor'";
-            $where[] = 'supervisor_meta.meta_value = %d';
-            $params[] = (int) $filters['supervisor_id'];
-        }
-
-        if (!empty($filters['agent_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} agent_meta ON agent_meta.user_id = users.ID AND agent_meta.meta_key = 'ucb_customer_assigned_agent'";
-            $where[] = 'agent_meta.meta_value = %d';
-            $params[] = (int) $filters['agent_id'];
-        }
-
-        if (!empty($filters['search'])) {
-            $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
-            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-        }
-
-        if (!empty($filters['registered_date'])) {
-            $date = sanitize_text_field((string) $filters['registered_date']);
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                $where[] = 'DATE(users.user_registered) = %s';
-                $params[] = $date;
-            }
-        }
-
-        $order = 'DESC';
-        if (!empty($filters['order'])) {
-            $maybe_order = strtoupper(sanitize_text_field((string) $filters['order']));
-            if (in_array($maybe_order, ['ASC', 'DESC'], true)) {
-                $order = $maybe_order;
-            }
-        }
-
-        $offset = max(0, ($page - 1) * $per_page);
-
-        $base_from = "FROM {$wpdb->users} users " . implode(' ', array_unique($joins));
-        $base_where = 'WHERE ' . implode(' AND ', $where);
-
-        $count_sql = "SELECT COUNT(DISTINCT users.ID) {$base_from} {$base_where}";
-        $count_query = !empty($params) ? $wpdb->prepare($count_sql, ...$params) : $count_sql;
-        $total = (int) $wpdb->get_var($count_query);
-
-        $items_sql = "SELECT DISTINCT users.ID {$base_from} {$base_where} ORDER BY users.user_registered {$order} LIMIT %d OFFSET %d";
-        $items_params = array_merge($params, [$per_page, $offset]);
-        $items_query = $wpdb->prepare($items_sql, ...$items_params);
-        $ids = array_map('intval', (array) $wpdb->get_col($items_query));
-
-        $users = [];
-        foreach ($ids as $user_id) {
-            $user = get_user_by('id', $user_id);
-            if ($user instanceof WP_User) {
-                $users[] = $user;
-            }
-        }
-
-        $items = array_map(function (WP_User $user) {
-            return $this->format_customer($user);
-        }, $users);
-
-        return [
-            'items' => $items,
-            'total' => $total,
-        ];
-    }
-
     /**
      * Count customers matching filters.
      */
@@ -255,8 +169,6 @@ class CustomerService {
      * @return array<string, int>
      */
     public function get_status_counts(array $filters = [], ?int $user_id = null): array {
-        global $wpdb;
-
         if (null === $user_id) {
             $user_id = get_current_user_id();
         }
@@ -271,104 +183,89 @@ class CustomerService {
 
         $allowed_customer_ids = $this->get_customer_ids_from_forms($filters);
 
-        if (empty($allowed_customer_ids)) {
-            $status_manager = new StatusManager();
-            $counts = [];
-            foreach (array_keys($status_manager->get_statuses()) as $status) {
-                $counts[$status] = 0;
-            }
+        $status_manager = new StatusManager();
+        $counts = [];
+        foreach (array_keys($status_manager->get_statuses()) as $status) {
+            $counts[$status] = 0;
+        }
 
+        if (empty($allowed_customer_ids)) {
             ksort($counts);
 
             return $counts;
         }
 
-        $capabilities_key = $wpdb->get_blog_prefix() . 'capabilities';
-        $role_join = $wpdb->prepare(
-            "INNER JOIN {$wpdb->usermeta} role_meta ON role_meta.user_id = status_meta.user_id AND role_meta.meta_key = %s",
-            $capabilities_key
-        );
-
-        $joins = [
-            "INNER JOIN {$wpdb->users} users ON users.ID = status_meta.user_id",
-            $role_join,
+        $args = [
+            'number'   => -1,
+            'orderby'  => 'registered',
+            'order'    => 'DESC',
+            'role__in' => ['customer'],
+            'include'  => $allowed_customer_ids,
+            'fields'   => 'all_with_meta',
         ];
-        $where = [
-            "status_meta.meta_key = 'ucb_customer_status'",
-            'role_meta.meta_value LIKE %s',
-        ];
-        $params = ['%' . $wpdb->esc_like('"customer"') . '%'];
-
-        if (!empty($filters['status'])) {
-            $where[] = 'status_meta.meta_value = %s';
-            $params[] = sanitize_key($filters['status']);
-        }
-
-        if (!empty($filters['card_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} card_meta ON card_meta.user_id = status_meta.user_id AND card_meta.meta_key = 'ucb_customer_card_id'";
-            $where[] = 'card_meta.meta_value = %d';
-            $params[] = (int) $filters['card_id'];
-        }
-
-        if (!empty($filters['supervisor_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} sup_meta ON sup_meta.user_id = status_meta.user_id AND sup_meta.meta_key = 'ucb_customer_assigned_supervisor'";
-            $where[] = 'sup_meta.meta_value = %d';
-            $params[] = (int) $filters['supervisor_id'];
-        }
-
-        if (!empty($filters['agent_id'])) {
-            $joins[] = "INNER JOIN {$wpdb->usermeta} agent_meta ON agent_meta.user_id = status_meta.user_id AND agent_meta.meta_key = 'ucb_customer_assigned_agent'";
-            $where[] = 'agent_meta.meta_value = %d';
-            $params[] = (int) $filters['agent_id'];
-        }
 
         if (!empty($filters['search'])) {
-            $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
-            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
+            $search = sanitize_text_field($filters['search']);
+            $args['search'] = '*' . $search . '*';
+            $args['search_columns'] = ['user_login', 'user_email', 'display_name'];
         }
 
         if (!empty($filters['registered_date'])) {
             $date = sanitize_text_field((string) $filters['registered_date']);
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                $where[] = 'DATE(users.user_registered) = %s';
-                $params[] = $date;
+            if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date)) {
+                $args['date_query'] = [
+                    [
+                        'after'     => $date . ' 00:00:00',
+                        'before'    => $date . ' 23:59:59',
+                        'inclusive' => true,
+                    ],
+                ];
             }
         }
 
-        $placeholders = implode(',', array_fill(0, count($allowed_customer_ids), '%d'));
-        $where[] = "status_meta.user_id IN ($placeholders)";
-        foreach ($allowed_customer_ids as $customer_id) {
-            $params[] = (int) $customer_id;
-        }
+        $query = new WP_User_Query($args);
 
-        $sql = "SELECT status_meta.meta_value AS status, COUNT(*) AS total
-                FROM {$wpdb->usermeta} status_meta
-                " . implode(' ', $joins) . "
-                WHERE " . implode(' AND ', $where) . "
-                GROUP BY status_meta.meta_value";
+        $status_filter = !empty($filters['status']) ? sanitize_key($filters['status']) : null;
+        $card_filter = !empty($filters['card_id']) ? (int) $filters['card_id'] : null;
+        $supervisor_filter = !empty($filters['supervisor_id']) ? (int) $filters['supervisor_id'] : null;
+        $agent_filter = !empty($filters['agent_id']) ? (int) $filters['agent_id'] : null;
 
-        if (!empty($params)) {
-            $sql = $wpdb->prepare($sql, ...$params);
-        }
-
-        $results = $wpdb->get_results($sql);
-        $counts = [];
-
-        foreach ((array) $results as $row) {
-            $status_key = is_object($row) ? (string) $row->status : '';
-            if ($status_key === '') {
+        foreach ($query->get_results() as $user) {
+            if (!$user instanceof WP_User) {
                 continue;
             }
-            $counts[$status_key] = (int) $row->total;
-        }
 
-        $status_manager = new StatusManager();
-        foreach (array_keys($status_manager->get_statuses()) as $status) {
-            if (!isset($counts[$status])) {
-                $counts[$status] = 0;
+            $customer_id = (int) $user->ID;
+            $this->card_repository->ensure_legacy_migrated($customer_id);
+            $cards = $this->get_customer_cards_map($customer_id);
+
+            foreach ($cards as $card_id => $card_meta) {
+                if ($card_filter && $card_filter !== $card_id) {
+                    continue;
+                }
+
+                $status = isset($card_meta['status']) && $card_meta['status'] !== ''
+                    ? sanitize_key($card_meta['status'])
+                    : 'unassigned';
+
+                if ($status_filter && $status_filter !== $status) {
+                    continue;
+                }
+
+                $assigned_supervisor = (int) ($card_meta['supervisor_id'] ?? 0);
+                if ($supervisor_filter && $supervisor_filter !== $assigned_supervisor) {
+                    continue;
+                }
+
+                $assigned_agent = (int) ($card_meta['agent_id'] ?? 0);
+                if ($agent_filter && $agent_filter !== $assigned_agent) {
+                    continue;
+                }
+
+                if (!isset($counts[$status])) {
+                    $counts[$status] = 0;
+                }
+                $counts[$status]++;
             }
         }
 
@@ -382,56 +279,20 @@ class CustomerService {
      *
      * @return array<string, mixed>
      */
-    public function format_customer(WP_User $user): array {
-        $user_id = $user->ID;
+    public function format_customer(WP_User $user, ?int $card_id = null): array {
+        $cards = $this->get_customer_cards_map((int) $user->ID);
 
-        $supervisor_id = (int) get_user_meta($user_id, 'ucb_customer_assigned_supervisor', true);
-        $agent_id = (int) get_user_meta($user_id, 'ucb_customer_assigned_agent', true);
-        $card_id = (int) get_user_meta($user_id, 'ucb_customer_card_id', true);
-
-        $supervisor_name = $supervisor_id ? $this->get_user_display_name($supervisor_id) : null;
-        $agent_name = $agent_id ? $this->get_user_display_name($agent_id) : null;
-        $card_title = $card_id ? get_the_title($card_id) : null;
-
-        $form_data = $this->get_sanitized_form_data($user_id);
-        $submission_data = $this->get_latest_submission_data($user_id);
-
-        if (!empty($submission_data['fields'])) {
-            $form_data = $this->merge_form_fields($form_data, $submission_data['fields']);
+        if (empty($cards)) {
+            return $this->format_customer_for_card($user, $card_id ?? 0, []);
         }
 
-        $phone_meta = get_user_meta($user_id, 'ucb_customer_phone', true);
-        if ('' === $phone_meta) {
-            $phone_meta = get_user_meta($user_id, 'phone', true);
+        if (null !== $card_id && isset($cards[$card_id])) {
+            return $this->format_customer_for_card($user, $card_id, $cards[$card_id]);
         }
 
-        $phone_value = is_scalar($phone_meta) ? (string) $phone_meta : '';
+        $first_card_id = (int) array_key_first($cards);
 
-        return [
-            'id'                        => $user_id,
-            'username'                 => $user->user_login,
-            'email'                    => $user->user_email,
-            'first_name'               => $user->first_name,
-            'last_name'                => $user->last_name,
-            'display_name'             => $user->display_name,
-            'phone'                    => $phone_value !== '' ? $phone_value : null,
-            'status'                   => get_user_meta($user_id, 'ucb_customer_status', true) ?: 'unassigned',
-            'assigned_supervisor'      => $supervisor_id,
-            'assigned_supervisor_name' => $supervisor_name,
-            'assigned_agent'           => $agent_id,
-            'assigned_agent_name'      => $agent_name,
-            'card_id'                  => $card_id,
-            'card_title'               => $card_title,
-            'random_code'              => get_user_meta($user_id, 'ucb_customer_random_code', true),
-            'upsell_field_key'         => get_user_meta($user_id, 'ucb_upsell_field_key', true) ?: null,
-            'upsell_field_label'       => get_user_meta($user_id, 'ucb_upsell_field_label', true) ?: null,
-            'upsell_amount'            => (float) get_user_meta($user_id, 'ucb_upsell_amount', true),
-            'upsell_order_id'          => (int) get_user_meta($user_id, 'ucb_upsell_order_id', true),
-            'upsell_pay_link'          => get_user_meta($user_id, 'ucb_upsell_pay_link', true) ?: null,
-            'registered_at'            => mysql_to_rfc3339($user->user_registered),
-            'form_data'                => $form_data,
-            'form_schedule'            => $submission_data['schedule'],
-        ];
+        return $this->format_customer_for_card($user, $first_card_id, $cards[$first_card_id]);
     }
 
     /**
@@ -439,8 +300,10 @@ class CustomerService {
      *
      * @return array<int, array{label: string, value: string}>
      */
-    private function get_sanitized_form_data(int $user_id): array {
-        $raw_data = get_user_meta($user_id, 'ucb_customer_form_data', true);
+    private function get_sanitized_form_data(int $user_id, $raw_data = null): array {
+        if (null === $raw_data) {
+            $raw_data = get_user_meta($user_id, 'ucb_customer_form_data', true);
+        }
 
         $entries = $this->normalize_form_entries($raw_data);
 
@@ -466,34 +329,57 @@ class CustomerService {
      *
      * @return array{fields: array<int, array{label: string, value: string}>, schedule: array{date: ?string, time: ?string}}
      */
-    private function get_latest_submission_data(int $user_id): array {
-        $submissions = get_posts([
-            'post_type'      => 'uc_submission',
-            'post_status'    => 'any',
-            'posts_per_page' => 1,
-            'orderby'        => 'date',
-            'order'          => 'DESC',
-            'fields'         => 'ids',
-            'meta_query'     => [
+    private function get_latest_submission_data(int $user_id, ?int $card_id = null, ?int $preferred_submission_id = null): array {
+        $submission_id = 0;
+
+        if ($preferred_submission_id) {
+            $owner_id = (int) get_post_meta($preferred_submission_id, '_uc_user_id', true);
+            $submission_card = (int) get_post_meta($preferred_submission_id, '_uc_card_id', true);
+            if ($owner_id === $user_id && (null === $card_id || $submission_card === $card_id)) {
+                $submission_id = $preferred_submission_id;
+            }
+        }
+
+        if ($submission_id <= 0) {
+            $meta_query = [
                 [
                     'key'   => '_uc_user_id',
                     'value' => $user_id,
                     'compare' => '=',
                 ],
-            ],
-        ]);
-
-        if (empty($submissions)) {
-            return [
-                'fields' => [],
-                'schedule' => [
-                    'date' => null,
-                    'time' => null,
-                ],
             ];
-        }
 
-        $submission_id = (int) $submissions[0];
+            if (null !== $card_id) {
+                $meta_query[] = [
+                    'key'   => '_uc_card_id',
+                    'value' => $card_id,
+                    'compare' => '=',
+                ];
+            }
+
+            $submissions = get_posts([
+                'post_type'      => 'uc_submission',
+                'post_status'    => 'any',
+                'posts_per_page' => 1,
+                'orderby'        => 'date',
+                'order'          => 'DESC',
+                'fields'         => 'ids',
+                'meta_query'     => $meta_query,
+            ]);
+
+            if (empty($submissions)) {
+                return [
+                    'fields' => [],
+                    'schedule' => [
+                        'date' => null,
+                        'time' => null,
+                    ],
+                    'random_code' => null,
+                ];
+            }
+
+            $submission_id = (int) $submissions[0];
+        }
 
         $field_map = [
             '_uc_code'     => __('کد رزرو', UCB_TEXT_DOMAIN),
@@ -526,6 +412,7 @@ class CustomerService {
 
         $date_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_date', true));
         $time_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_time', true));
+        $random_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_surprise', true));
 
         return [
             'fields' => $fields,
@@ -533,6 +420,7 @@ class CustomerService {
                 'date' => '' !== $date_value ? $date_value : null,
                 'time' => '' !== $time_value ? $time_value : null,
             ],
+            'random_code' => '' !== $random_value ? $random_value : null,
         ];
     }
 
@@ -694,6 +582,184 @@ class CustomerService {
         }));
     }
 
+    /**
+     * Retrieve per-card metadata for the given customer.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function get_customer_cards_map(int $customer_id): array {
+        $cards = $this->card_repository->get_cards($customer_id);
+
+        if (!empty($cards)) {
+            return $cards;
+        }
+
+        $derived = $this->derive_cards_from_submissions($customer_id);
+        if (!empty($derived)) {
+            foreach ($derived as $card_id => $data) {
+                $this->card_repository->set_card($customer_id, (int) $card_id, $data);
+            }
+
+            return $this->card_repository->get_cards($customer_id);
+        }
+
+        return [];
+    }
+
+    /**
+     * Populate card map from stored submissions.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function derive_cards_from_submissions(int $customer_id): array {
+        $submissions = get_posts([
+            'post_type'      => 'uc_submission',
+            'post_status'    => 'any',
+            'posts_per_page' => -1,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'fields'         => 'ids',
+            'meta_query'     => [
+                [
+                    'key'   => '_uc_user_id',
+                    'value' => $customer_id,
+                    'compare' => '=',
+                ],
+            ],
+        ]);
+
+        if (empty($submissions)) {
+            return [];
+        }
+
+        $cards = [];
+
+        foreach ($submissions as $submission) {
+            $submission_id = (int) $submission;
+            $card_id = (int) get_post_meta($submission_id, '_uc_card_id', true);
+
+            if ($card_id <= 0) {
+                continue;
+            }
+
+            if (isset($cards[$card_id])) {
+                continue; // Already captured the most recent entry.
+            }
+
+            $status = get_post_meta($submission_id, '_uc_status', true);
+            if (!is_string($status) || '' === $status) {
+                $status = get_user_meta($customer_id, 'ucb_customer_status', true) ?: 'unassigned';
+            }
+
+            $date_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_date', true));
+            $time_value = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_time', true));
+            $random_code = $this->sanitize_form_value(get_post_meta($submission_id, '_uc_surprise', true));
+            $meta_fields = get_post_meta($submission_id, '_uc_meta_fields', true);
+
+            $cards[$card_id] = array_filter([
+                'status'         => sanitize_key($status),
+                'supervisor_id'  => (int) get_post_meta($submission_id, '_uc_supervisor_id', true),
+                'agent_id'       => (int) get_post_meta($submission_id, '_uc_agent_id', true),
+                'submission_id'  => $submission_id,
+                'schedule'       => [
+                    'date' => '' !== $date_value ? $date_value : null,
+                    'time' => '' !== $time_value ? $time_value : null,
+                ],
+                'random_code'    => '' !== $random_code ? $random_code : null,
+                'form_data'      => is_array($meta_fields) ? $meta_fields : null,
+            ], static function ($value) {
+                return null !== $value;
+            });
+        }
+
+        return $cards;
+    }
+
+    /**
+     * Format a customer entry for a specific card.
+     *
+     * @return array<string, mixed>
+     */
+    private function format_customer_for_card(WP_User $user, int $card_id, array $card_meta): array {
+        $user_id = (int) $user->ID;
+
+        $status = isset($card_meta['status']) && $card_meta['status'] !== ''
+            ? sanitize_key($card_meta['status'])
+            : 'unassigned';
+
+        $supervisor_id = (int) ($card_meta['supervisor_id'] ?? 0);
+        $agent_id = (int) ($card_meta['agent_id'] ?? 0);
+        $submission_id = (int) ($card_meta['submission_id'] ?? 0);
+
+        $supervisor_name = $supervisor_id ? $this->get_user_display_name($supervisor_id) : null;
+        $agent_name = $agent_id ? $this->get_user_display_name($agent_id) : null;
+        $card_title = $card_id ? get_the_title($card_id) : null;
+
+        $form_data = [];
+        if (isset($card_meta['form_data']) && !empty($card_meta['form_data'])) {
+            $form_data = $this->get_sanitized_form_data($user_id, $card_meta['form_data']);
+        } else {
+            $form_data = $this->get_sanitized_form_data($user_id);
+        }
+
+        $submission_data = $this->get_latest_submission_data($user_id, $card_id, $submission_id);
+        if (!empty($submission_data['fields'])) {
+            $form_data = $this->merge_form_fields($form_data, $submission_data['fields']);
+        }
+
+        $schedule = ['date' => null, 'time' => null];
+        if (isset($card_meta['schedule']) && is_array($card_meta['schedule'])) {
+            $schedule = array_merge($schedule, $card_meta['schedule']);
+        }
+        if (!empty($submission_data['schedule'])) {
+            $schedule = array_merge($schedule, $submission_data['schedule']);
+        }
+
+        $random_code = $card_meta['random_code'] ?? null;
+        if (null === $random_code) {
+            $random_code = $submission_data['random_code'] ?? null;
+        }
+        if (null === $random_code) {
+            $random_code = get_user_meta($user_id, 'ucb_customer_random_code', true) ?: null;
+        }
+
+        $upsell = $this->card_repository->get_card_upsell($user_id, $card_id);
+
+        $phone_meta = get_user_meta($user_id, 'ucb_customer_phone', true);
+        if ('' === $phone_meta) {
+            $phone_meta = get_user_meta($user_id, 'phone', true);
+        }
+        $phone_value = is_scalar($phone_meta) ? (string) $phone_meta : '';
+
+        return [
+            'id'                        => $user_id,
+            'customer_id'               => $user_id,
+            'entry_id'                  => $submission_id ?: null,
+            'username'                  => $user->user_login,
+            'email'                     => $user->user_email,
+            'first_name'                => $user->first_name,
+            'last_name'                 => $user->last_name,
+            'display_name'              => $user->display_name,
+            'phone'                     => $phone_value !== '' ? $phone_value : null,
+            'status'                    => $status,
+            'assigned_supervisor'       => $supervisor_id,
+            'assigned_supervisor_name'  => $supervisor_name,
+            'assigned_agent'            => $agent_id,
+            'assigned_agent_name'       => $agent_name,
+            'card_id'                   => $card_id,
+            'card_title'                => $card_title,
+            'random_code'               => $random_code,
+            'upsell_field_key'          => $upsell['field_key'] ?? null,
+            'upsell_field_label'        => $upsell['field_label'] ?? null,
+            'upsell_amount'             => isset($upsell['amount']) ? (float) $upsell['amount'] : 0.0,
+            'upsell_order_id'           => isset($upsell['order_id']) ? (int) $upsell['order_id'] : 0,
+            'upsell_pay_link'           => $upsell['pay_link'] ?? null,
+            'registered_at'             => mysql_to_rfc3339($user->user_registered),
+            'form_data'                 => $form_data,
+            'form_schedule'             => $schedule,
+        ];
+    }
+
     private function resolve_form_label($key, $value): string {
         if (is_array($value) && isset($value['label'])) {
             return sanitize_text_field((string) $value['label']);
@@ -735,18 +801,39 @@ class CustomerService {
     /**
      * Assign supervisor to customer.
      */
-    public function assign_supervisor(int $customer_id, int $supervisor_id): void {
+    public function assign_supervisor(int $customer_id, int $supervisor_id, ?int $card_id = null): void {
         update_user_meta($customer_id, 'ucb_customer_assigned_supervisor', $supervisor_id);
-        $this->update_forms_meta($customer_id, '_uc_supervisor_id', $supervisor_id);
-        $this->update_reservations_supervisor($customer_id, $supervisor_id);
+
+        if (null !== $card_id && $card_id > 0) {
+            $this->card_repository->update_supervisor($customer_id, $card_id, $supervisor_id);
+            $this->update_forms_meta($customer_id, '_uc_supervisor_id', $supervisor_id, $card_id);
+            $this->update_reservations_supervisor($customer_id, $supervisor_id, $card_id);
+        } else {
+            $cards = $this->get_customer_cards_map($customer_id);
+            foreach (array_keys($cards) as $existing_card_id) {
+                $this->card_repository->update_supervisor($customer_id, (int) $existing_card_id, $supervisor_id);
+            }
+            $this->update_forms_meta($customer_id, '_uc_supervisor_id', $supervisor_id, null);
+            $this->update_reservations_supervisor($customer_id, $supervisor_id, null);
+        }
     }
 
     /**
      * Assign agent to customer.
      */
-    public function assign_agent(int $customer_id, int $agent_id): void {
+    public function assign_agent(int $customer_id, int $agent_id, ?int $card_id = null): void {
         update_user_meta($customer_id, 'ucb_customer_assigned_agent', $agent_id);
-        $this->update_forms_meta($customer_id, '_uc_agent_id', $agent_id);
+
+        if (null !== $card_id && $card_id > 0) {
+            $this->card_repository->update_agent($customer_id, $card_id, $agent_id);
+            $this->update_forms_meta($customer_id, '_uc_agent_id', $agent_id, $card_id);
+        } else {
+            $cards = $this->get_customer_cards_map($customer_id);
+            foreach (array_keys($cards) as $existing_card_id) {
+                $this->card_repository->update_agent($customer_id, (int) $existing_card_id, $agent_id);
+            }
+            $this->update_forms_meta($customer_id, '_uc_agent_id', $agent_id, null);
+        }
     }
 
     /**
@@ -754,6 +841,9 @@ class CustomerService {
      */
     public function set_card(int $customer_id, int $card_id): void {
         update_user_meta($customer_id, 'ucb_customer_card_id', $card_id);
+        if ($card_id > 0) {
+            $this->card_repository->set_card($customer_id, $card_id, ['status' => 'unassigned']);
+        }
     }
 
     /**
@@ -807,18 +897,27 @@ class CustomerService {
     /**
      * Update uc_submission meta for customer.
      */
-    protected function update_forms_meta(int $customer_id, string $meta_key, int $value): void {
+    protected function update_forms_meta(int $customer_id, string $meta_key, int $value, ?int $card_id = null): void {
+        $meta_query = [
+            [
+                'key'   => '_uc_user_id',
+                'value' => $customer_id,
+            ],
+        ];
+
+        if (null !== $card_id && $card_id > 0) {
+            $meta_query[] = [
+                'key'   => '_uc_card_id',
+                'value' => $card_id,
+            ];
+        }
+
         $forms = get_posts([
             'post_type'      => 'uc_submission',
             'post_status'    => 'any',
             'posts_per_page' => -1,
             'fields'         => 'ids',
-            'meta_query'     => [
-                [
-                    'key'   => '_uc_user_id',
-                    'value' => $customer_id,
-                ],
-            ],
+            'meta_query'     => $meta_query,
         ]);
 
         foreach ($forms as $form_id) {
@@ -829,16 +928,24 @@ class CustomerService {
     /**
      * Update supervisor in reservations table.
      */
-    protected function update_reservations_supervisor(int $customer_id, int $supervisor_id): void {
+    protected function update_reservations_supervisor(int $customer_id, int $supervisor_id, ?int $card_id = null): void {
         global $wpdb;
 
         $table = $wpdb->prefix . 'ucb_reservations';
+        $where = ['customer_id' => $customer_id];
+        $where_format = ['%d'];
+
+        if (null !== $card_id && $card_id > 0) {
+            $where['card_id'] = $card_id;
+            $where_format[] = '%d';
+        }
+
         $wpdb->update(
             $table,
             ['supervisor_id' => $supervisor_id],
-            ['customer_id' => $customer_id],
+            $where,
             ['%d'],
-            ['%d']
+            $where_format
         );
     }
 

@@ -259,20 +259,20 @@ export function CustomerManagementView({
   const updateStatusMutation = useMutation<
     unknown,
     unknown,
-    { customerId: number; status: CustomerStatus; reason?: string; meta?: Record<string, unknown> }
+    { customerId: number; cardId?: number; status: CustomerStatus; reason?: string; meta?: Record<string, unknown> }
   >({
     mutationFn: async ({
       customerId,
+      cardId,
       status,
       reason,
       meta,
-    }: {
-      customerId: number
-      status: CustomerStatus
-      reason?: string
-      meta?: Record<string, unknown>
     }) => {
-      const response = await customersApi.updateCustomerStatus(customerId, status, { reason, meta })
+      const response = await customersApi.updateCustomerStatus(customerId, status, {
+        reason,
+        meta,
+        cardId,
+      })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در تغییر وضعیت')
       }
@@ -288,9 +288,9 @@ export function CustomerManagementView({
     },
   })
 
-  const sendNormalCodeMutation = useMutation<unknown, unknown, number>({
-    mutationFn: async (customerId: number) => {
-      const response = await customersApi.sendNormalCode(customerId)
+  const sendNormalCodeMutation = useMutation<unknown, unknown, { customerId: number; cardId?: number }>({
+    mutationFn: async ({ customerId, cardId }) => {
+      const response = await customersApi.sendNormalCode(customerId, cardId)
       if (!response.success) {
         throw new Error(response.error?.message || 'ارسال پیامک ناموفق بود')
       }
@@ -322,8 +322,16 @@ export function CustomerManagementView({
   })
 
   const assignSupervisorMutation = useMutation({
-    mutationFn: async ({ customerId, supervisorId }: { customerId: number; supervisorId: number }) => {
-      const response = await customersApi.assignSupervisor(customerId, supervisorId)
+    mutationFn: async ({
+      customerId,
+      supervisorId,
+      cardId,
+    }: {
+      customerId: number
+      supervisorId: number
+      cardId?: number
+    }) => {
+      const response = await customersApi.assignSupervisor(customerId, supervisorId, cardId)
       if (!response.success) {
         throw new Error(response.error?.message || 'تخصیص سرپرست ناموفق بود')
       }
@@ -339,8 +347,16 @@ export function CustomerManagementView({
   })
 
   const assignAgentMutation = useMutation({
-    mutationFn: async ({ customerId, agentId }: { customerId: number; agentId: number }) => {
-      const response = await customersApi.assignAgent(customerId, agentId)
+    mutationFn: async ({
+      customerId,
+      agentId,
+      cardId,
+    }: {
+      customerId: number
+      agentId: number
+      cardId?: number
+    }) => {
+      const response = await customersApi.assignAgent(customerId, agentId, cardId)
       if (!response.success) {
         throw new Error(response.error?.message || 'تخصیص کارشناس ناموفق بود')
       }
@@ -419,6 +435,7 @@ export function CustomerManagementView({
 
     await updateStatusMutation.mutateAsync({
       customerId: customer.id,
+      cardId: customer.card_id,
       status,
     })
   }
@@ -446,18 +463,20 @@ export function CustomerManagementView({
       await assignSupervisorMutation.mutateAsync({
         customerId: assignmentDialog.customer.id,
         supervisorId: selectedId,
+        cardId: assignmentDialog.customer.card_id,
       })
     } else {
       await assignAgentMutation.mutateAsync({
         customerId: assignmentDialog.customer.id,
         agentId: selectedId,
+        cardId: assignmentDialog.customer.card_id,
       })
     }
     setAssignmentDialog(null)
   }
 
   const handleSendNormalCode = async (customer: Customer) => {
-    await sendNormalCodeMutation.mutateAsync(customer.id)
+    await sendNormalCodeMutation.mutateAsync({ customerId: customer.id, cardId: customer.card_id })
   }
 
   const handleStartUpsell = async (customer: Customer, fieldKey: string) => {
@@ -473,13 +492,43 @@ export function CustomerManagementView({
     })
   }
 
-  const selectedStatusUpdatingId = updateStatusMutation.isPending
-    ? updateStatusMutation.variables?.customerId ?? null
-    : null
+  const deriveMutationRowKey = (
+    isPending: boolean,
+    variables: { customerId?: number | null; cardId?: number | null } | undefined
+  ) => {
+    if (!isPending || !variables || variables.customerId == null) {
+      return null
+    }
 
-  const normalSmsCustomerId = sendNormalCodeMutation.isPending ? sendNormalCodeMutation.variables ?? null : null
+    const normalizedCustomerId = Number(variables.customerId)
+    if (Number.isNaN(normalizedCustomerId)) {
+      return null
+    }
 
-  const upsellCustomerId = initUpsellMutation.isPending ? initUpsellMutation.variables?.customerId ?? null : null
+    if (variables.cardId == null) {
+      return `${normalizedCustomerId}-none`
+    }
+
+    const normalizedCardId = Number(variables.cardId)
+    return Number.isNaN(normalizedCardId)
+      ? `${normalizedCustomerId}-none`
+      : `${normalizedCustomerId}-${normalizedCardId}`
+  }
+
+  const selectedStatusUpdatingKey = deriveMutationRowKey(
+    updateStatusMutation.isPending,
+    updateStatusMutation.variables
+  )
+
+  const normalSmsCustomerKey = deriveMutationRowKey(
+    sendNormalCodeMutation.isPending,
+    sendNormalCodeMutation.variables
+  )
+
+  const upsellCustomerKey = deriveMutationRowKey(
+    initUpsellMutation.isPending,
+    initUpsellMutation.variables
+  )
 
   return (
     <div className="space-y-6">
@@ -569,7 +618,7 @@ export function CustomerManagementView({
             <div className="space-y-3">
               {customers.map((customer: Customer) => (
                 <CustomerRow
-                  key={customer.id}
+                  key={`${customer.id}-${customer.card_id ?? 'none'}`}
                   customer={customer}
                   disabled={isMutating}
                   onStatusChange={handleStatusChange}
@@ -580,9 +629,9 @@ export function CustomerManagementView({
                     assignmentEnabled.supervisor ? (c) => handleOpenAssignment('supervisor', c) : undefined
                   }
                   onOpenAssignAgent={assignmentEnabled.agent ? (c) => handleOpenAssignment('agent', c) : undefined}
-                  statusUpdatingId={selectedStatusUpdatingId}
-                  normalSmsCustomerId={normalSmsCustomerId}
-                  upsellCustomerId={upsellCustomerId}
+                  statusUpdatingKey={selectedStatusUpdatingKey}
+                  normalSmsCustomerKey={normalSmsCustomerKey}
+                  upsellCustomerKey={upsellCustomerKey}
                   showCallButton={showCallButton}
                   onShowFormInfo={onShowFormInfo}
                 />
@@ -662,9 +711,9 @@ interface CustomerRowProps {
   onOpenNoteDialog?: (customer: Customer) => void
   onOpenAssignSupervisor?: (customer: Customer) => void
   onOpenAssignAgent?: (customer: Customer) => void
-  statusUpdatingId: number | null
-  normalSmsCustomerId: number | null
-  upsellCustomerId: number | null
+  statusUpdatingKey: string | null
+  normalSmsCustomerKey: string | null
+  upsellCustomerKey: string | null
   showCallButton?: boolean
   onShowFormInfo?: (customer: Customer) => void
 }
@@ -678,18 +727,19 @@ function CustomerRow({
   onOpenNoteDialog,
   onOpenAssignSupervisor,
   onOpenAssignAgent,
-  statusUpdatingId,
-  normalSmsCustomerId,
-  upsellCustomerId,
+  statusUpdatingKey,
+  normalSmsCustomerKey,
+  upsellCustomerKey,
   showCallButton,
   onShowFormInfo,
 }: CustomerRowProps) {
   const [selectedStatus, setSelectedStatus] = useState<CustomerStatus>(customer.status)
   const [selectedField, setSelectedField] = useState<string>(customer.upsell_field_key ?? '')
 
-  const isStatusUpdating = statusUpdatingId === customer.id
-  const isNormalSending = normalSmsCustomerId === customer.id
-  const isUpsellSubmitting = upsellCustomerId === customer.id
+  const rowKey = `${customer.id}-${customer.card_id ?? 'none'}`
+  const isStatusUpdating = statusUpdatingKey === rowKey
+  const isNormalSending = normalSmsCustomerKey === rowKey
+  const isUpsellSubmitting = upsellCustomerKey === rowKey
   const rowDisabled = disabled || isStatusUpdating
 
   const sanitizedPhone = customer.phone ? customer.phone.replace(/[^+\d]/g, '') : ''

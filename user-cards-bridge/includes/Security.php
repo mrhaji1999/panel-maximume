@@ -2,6 +2,7 @@
 
 namespace UCB;
 
+use UCB\Services\CustomerCardRepository;
 use WP_Error;
 use WP_REST_Request;
 
@@ -304,7 +305,7 @@ class Security {
     /**
      * Checks if user can manage customer.
      */
-    public static function can_manage_customer(int $customer_id): bool {
+    public static function can_manage_customer(int $customer_id, ?int $card_id = null): bool {
         if (current_user_can('ucb_manage_all') || current_user_can('manage_options')) {
             return true;
         }
@@ -317,13 +318,41 @@ class Security {
 
         $role = Roles::get_user_role($user_id);
 
+        $card_repository = new CustomerCardRepository();
+        $card_repository->ensure_legacy_migrated($customer_id);
+        $cards = $card_repository->get_cards($customer_id);
+
         if ('supervisor' === $role) {
+            if ($card_id && isset($cards[$card_id])) {
+                $assigned = (int) ($cards[$card_id]['supervisor_id'] ?? 0);
+                return $assigned === $user_id;
+            }
+
+            foreach ($cards as $meta) {
+                if ((int) ($meta['supervisor_id'] ?? 0) === $user_id) {
+                    return true;
+                }
+            }
+
             $assigned_supervisor = (int) get_user_meta($customer_id, 'ucb_customer_assigned_supervisor', true);
+
             return $assigned_supervisor === $user_id;
         }
 
         if ('agent' === $role) {
+            if ($card_id && isset($cards[$card_id])) {
+                $assigned = (int) ($cards[$card_id]['agent_id'] ?? 0);
+                return $assigned === $user_id;
+            }
+
+            foreach ($cards as $meta) {
+                if ((int) ($meta['agent_id'] ?? 0) === $user_id) {
+                    return true;
+                }
+            }
+
             $assigned_agent = (int) get_user_meta($customer_id, 'ucb_customer_assigned_agent', true);
+
             return $assigned_agent === $user_id;
         }
 
