@@ -113,7 +113,7 @@ export function AssignCustomersPage() {
                 <TableHead>
                   <Checkbox
                     checked={isAllSelected}
-                    onCheckedChange={toggleSelectAll}
+                    onCheckedChange={(checked: boolean) => toggleSelectAll(checked)}
                   />
                 </TableHead>
                 <TableHead>نام مشتری</TableHead>
@@ -132,7 +132,7 @@ export function AssignCustomersPage() {
                     <TableCell>
                       <Checkbox
                         checked={selectedCustomers.includes(customer.entry_id!)}
-                        onCheckedChange={(checked) => {
+                        onCheckedChange={(checked: boolean) => {
                           setSelectedCustomers(
                             checked
                               ? [...selectedCustomers, customer.entry_id!]
