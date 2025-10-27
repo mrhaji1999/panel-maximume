@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import { formsApi } from '@/lib/api'
 import type { CustomerFormField, FormSubmission } from '@/types'
 import { formatDateTime, getErrorMessage } from '@/lib/utils'
@@ -27,68 +28,74 @@ export function FormInfoDialog({
   onOpenChange,
   registeredAt,
 }: FormInfoDialogProps) {
-  const query = useQuery<FormSubmission | null>({
+  const query = useQuery<FormSubmission[]>({
     queryKey: ['customer-form-info', customerId],
     enabled: open && Boolean(customerId),
     queryFn: async () => {
       if (!customerId) throw new Error('شناسه مشتری نامعتبر است')
-      const response = await formsApi.getForms({ customer_id: customerId, per_page: 1 })
+      const response = await formsApi.getForms({ customer_id: customerId, per_page: 100 })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در دریافت اطلاعات فرم')
       }
-      const items = response.data?.items ?? []
-      return items.length > 0 ? items[0] : null
+      return response.data?.items ?? []
     },
     staleTime: 1000 * 60,
   })
 
-  const formFields = useMemo<CustomerFormField[]>(() => {
-    if (!query.data) {
-      return []
-    }
+  const forms = query.data ?? []
 
-    const fields: CustomerFormField[] = []
-    const { meta } = query.data
+  const preparedForms = useMemo(
+    () =>
+      forms.map((form) => {
+        const fields: CustomerFormField[] = []
+        const { meta } = form
 
-    const pushField = (label: string, value: unknown) => {
-      const normalizedLabel = (label || '').trim()
-      const normalizedValue = normalizeFormValue(value)
-      if (!normalizedLabel || !normalizedValue) {
-        return
-      }
-      fields.push({ label: normalizedLabel, value: normalizedValue })
-    }
-
-    pushField('کد رزرو', meta.code)
-    pushField('تاریخ رزرو', meta.date)
-    pushField('ساعت رزرو', meta.time)
-    pushField('کد شگفتانه', meta.surprise)
-
-    if (meta.meta && typeof meta.meta === 'object') {
-      Object.entries(meta.meta).forEach(([key, rawValue]) => {
-        const label = extractFieldLabel(key, rawValue)
-        const value = normalizeFormValue(rawValue)
-        if (value) {
-          fields.push({ label, value })
+        const pushField = (label: string, value: unknown) => {
+          const normalizedLabel = (label || '').trim()
+          const normalizedValue = normalizeFormValue(value)
+          if (!normalizedLabel || !normalizedValue) {
+            return
+          }
+          fields.push({ label: normalizedLabel, value: normalizedValue })
         }
-      })
-    }
 
-    const seen = new Set<string>()
-    return fields.filter((field) => {
-      const key = field.label.trim()
-      if (!key) {
-        return false
-      }
-      if (seen.has(key)) {
-        return false
-      }
-      seen.add(key)
-      return true
-    })
-  }, [query.data])
+        pushField('کد رزرو', meta.code)
+        pushField('تاریخ رزرو', meta.date)
+        pushField('ساعت رزرو', meta.time)
+        pushField('کد شگفتانه', meta.surprise)
 
-  const registeredAtLabel = query.data?.created_at ?? registeredAt ?? null
+        if (meta.meta && typeof meta.meta === 'object') {
+          Object.entries(meta.meta).forEach(([key, rawValue]) => {
+            const label = extractFieldLabel(key, rawValue)
+            const value = normalizeFormValue(rawValue)
+            if (value) {
+              fields.push({ label, value })
+            }
+          })
+        }
+
+        const seen = new Set<string>()
+        const uniqueFields = fields.filter((field) => {
+          const key = field.label.trim()
+          if (!key || seen.has(key)) {
+            return false
+          }
+          seen.add(key)
+          return true
+        })
+
+        return {
+          id: form.id,
+          title: form.title,
+          createdAt: form.created_at,
+          cardId: meta.card_id,
+          fields: uniqueFields,
+        }
+      }),
+    [forms]
+  )
+
+  const registeredAtLabel = preparedForms[0]?.createdAt ?? registeredAt ?? null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,19 +120,38 @@ export function FormInfoDialog({
           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-4 text-sm text-destructive">
             {getErrorMessage(query.error)}
           </div>
-        ) : formFields.length === 0 ? (
+        ) : preparedForms.length === 0 ? (
           <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
             اطلاعاتی برای این فرم ثبت نشده است.
           </div>
         ) : (
-          <div className="space-y-3">
-            {formFields.map((field, index) => (
-              <div
-                key={`${field.label}-${index}`}
-                className="rounded-md border border-border bg-muted/30 px-3 py-2"
-              >
-                <p className="text-xs font-medium text-muted-foreground">{field.label}</p>
-                <p className="text-sm font-medium text-foreground">{field.value || '-'}</p>
+          <div className="space-y-4">
+            {preparedForms.map((form) => (
+              <div key={form.id} className="space-y-3 rounded-md border border-border bg-muted/30 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{form.title || `فرم #${form.id}`}</p>
+                    <p className="text-xs text-muted-foreground">
+                      ارسال شده در: {formatDateTime(form.createdAt)}
+                    </p>
+                  </div>
+                  <Badge variant="outline">کارت #{form.cardId}</Badge>
+                </div>
+                {form.fields.length > 0 ? (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {form.fields.map((field, index) => (
+                      <div
+                        key={`${form.id}-${field.label}-${index}`}
+                        className="rounded-md border border-border bg-background/60 px-3 py-2"
+                      >
+                        <p className="text-xs font-medium text-muted-foreground">{field.label}</p>
+                        <p className="text-sm font-medium text-foreground">{field.value || '-'}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">فیلدی برای این فرم ثبت نشده است.</p>
+                )}
               </div>
             ))}
           </div>
