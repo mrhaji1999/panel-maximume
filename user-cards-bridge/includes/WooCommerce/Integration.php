@@ -157,9 +157,10 @@ class Integration {
         }
 
         if ($customer_id > 0) {
+            $card_id = (int) $order->get_meta('_ucb_card_id');
             $current_status = get_user_meta($customer_id, 'ucb_customer_status', true);
             if ('upsell_paid' !== $current_status) {
-                $this->status_manager->change_status($customer_id, 'upsell_paid', get_current_user_id() ?: 0);
+                $this->status_manager->change_status($customer_id, 'upsell_paid', get_current_user_id() ?: 0, [], $card_id ?: null);
             }
         }
     }

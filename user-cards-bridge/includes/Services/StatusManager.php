@@ -338,7 +338,7 @@ class StatusManager {
     /**
      * Change customer status
      */
-    public function change_status($customer_id, $new_status, $changed_by = null, $meta = []) {
+    public function change_status($customer_id, $new_status, $changed_by = null, $meta = [], $card_id = null) {
         if (!$this->status_exists($new_status)) {
             return new \WP_Error(
                 'invalid_status',
@@ -346,9 +346,21 @@ class StatusManager {
                 ['status' => 400]
             );
         }
-        
-        $old_status = get_user_meta($customer_id, 'ucb_customer_status', true);
-        
+
+        $card_repository = new \UCB\Services\CustomerCardRepository();
+        $card_repository->ensure_legacy_migrated($customer_id);
+        $cards = $card_repository->get_cards($customer_id);
+
+        $old_status = null;
+        if ($card_id && isset($cards[$card_id])) {
+            $old_status = $cards[$card_id]['status'] ?? null;
+        } elseif (!empty($cards)) {
+            $first = reset($cards);
+            $old_status = $first['status'] ?? null;
+        } else {
+            $old_status = get_user_meta($customer_id, 'ucb_customer_status', true);
+        }
+
         // Check if transition is allowed
         if ($old_status && !$this->can_transition($old_status, $new_status)) {
             return new \WP_Error(
@@ -360,13 +372,25 @@ class StatusManager {
         
         // Update status
         update_user_meta($customer_id, 'ucb_customer_status', $new_status);
-        
+
+        if ($card_id) {
+            $card_repository->update_status($customer_id, (int) $card_id, $new_status);
+        } else {
+            foreach (array_keys($cards) as $existing_card_id) {
+                $card_repository->update_status($customer_id, (int) $existing_card_id, $new_status);
+            }
+        }
+
         // Log status change
+        if (null !== $card_id) {
+            $meta['card_id'] = (int) $card_id;
+        }
+
         $this->log_status_change($customer_id, $old_status, $new_status, $changed_by, $meta);
-        
+
         // Handle special status actions
         $this->handle_status_actions($customer_id, $new_status, $meta);
-        
+
         return true;
     }
     
@@ -398,23 +422,24 @@ class StatusManager {
      * Handle special status actions
      */
     private function handle_status_actions($customer_id, $status, $meta) {
+        $card_id = isset($meta['card_id']) ? (int) $meta['card_id'] : null;
         switch ($status) {
             case 'normal':
-                $this->handle_normal_status($customer_id, $meta);
+                $this->handle_normal_status($customer_id, $meta, $card_id);
                 break;
             case 'upsell_pending':
-                $this->handle_upsell_pending_status($customer_id, $meta);
+                $this->handle_upsell_pending_status($customer_id, $meta, $card_id);
                 break;
             case 'upsell_paid':
-                $this->handle_upsell_paid_status($customer_id, $meta);
+                $this->handle_upsell_paid_status($customer_id, $meta, $card_id);
                 break;
         }
     }
-    
+
     /**
      * Handle normal status - send random code
      */
-    private function handle_normal_status($customer_id, $meta) {
+    private function handle_normal_status($customer_id, $meta, ?int $card_id = null) {
         $pending_order_id = (int) get_user_meta($customer_id, 'ucb_upsell_order_id', true);
         $revoked_token = false;
 
@@ -459,6 +484,10 @@ class StatusManager {
 
         // Store code in user meta
         update_user_meta($customer_id, 'ucb_customer_random_code', $random_code);
+        if ($card_id) {
+            $repo = new \UCB\Services\CustomerCardRepository();
+            $repo->update_random_code($customer_id, $card_id, $random_code);
+        }
 
         $phone = get_user_meta($customer_id, 'phone', true);
         if (!$phone) {
@@ -480,7 +509,7 @@ class StatusManager {
     /**
      * Handle upsell pending status
      */
-    private function handle_upsell_pending_status($customer_id, $meta) {
+    private function handle_upsell_pending_status($customer_id, $meta, ?int $card_id = null) {
         // Store order information
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_order_id', $meta['order_id']);
@@ -501,12 +530,23 @@ class StatusManager {
         if (isset($meta['pay_link'])) {
             update_user_meta($customer_id, 'ucb_upsell_pay_link', esc_url_raw($meta['pay_link']));
         }
+
+        if ($card_id) {
+            $repo = new \UCB\Services\CustomerCardRepository();
+            $repo->update_upsell($customer_id, $card_id, [
+                'order_id'   => $meta['order_id'] ?? null,
+                'field_key'  => $meta['field_key'] ?? null,
+                'field_label'=> $meta['field_label'] ?? null,
+                'amount'     => $meta['amount'] ?? null,
+                'pay_link'   => $meta['pay_link'] ?? null,
+            ]);
+        }
     }
-    
+
     /**
      * Handle upsell paid status
      */
-    private function handle_upsell_paid_status($customer_id, $meta) {
+    private function handle_upsell_paid_status($customer_id, $meta, ?int $card_id = null) {
         // Clear pending order info but keep audit trail
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_last_order_id', $meta['order_id']);
@@ -514,6 +554,14 @@ class StatusManager {
 
         delete_user_meta($customer_id, 'ucb_upsell_order_id');
         delete_user_meta($customer_id, 'ucb_upsell_pay_link');
+
+        if ($card_id) {
+            $repo = new \UCB\Services\CustomerCardRepository();
+            $repo->update_upsell($customer_id, $card_id, [
+                'order_id' => $meta['order_id'] ?? null,
+                'pay_link' => null,
+            ]);
+        }
 
         // Log successful payment
         \UCB\Logger::log('info', 'Upsell payment completed', [

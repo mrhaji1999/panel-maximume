@@ -76,7 +76,9 @@ class SMS extends BaseController {
 
     public function send_normal_code(WP_REST_Request $request) {
         $customer_id = (int) $request->get_param('id');
-        $result = $this->notifications->send_normal_code($customer_id);
+        $card_id = $request->get_param('card_id');
+        $card_id = $card_id !== null ? (int) $card_id : null;
+        $result = $this->notifications->send_normal_code($customer_id, $card_id);
 
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);

@@ -21,12 +21,12 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
 
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(10)
-  const [selectedCustomers, setSelectedCustomers] = useState<number[]>([])
+  const [selectedCustomerKeys, setSelectedCustomerKeys] = useState<string[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState<number | ''>('')
 
   useEffect(() => {
     setPage(1)
-    setSelectedCustomers([])
+    setSelectedCustomerKeys([])
   }, [perPage, supervisorId])
 
   const customersQuery = useQuery<CustomerListResponse>({
@@ -59,17 +59,28 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
     },
   })
 
+  const createSelectionKey = (customerId: number, cardId?: number | null) =>
+    `${customerId}-${cardId ?? 'none'}`
+
+  const parseSelectionKey = (key: string): { customerId: number; cardId?: number } => {
+    const [idPart, cardPart] = key.split('-', 2)
+    const customerId = Number(idPart)
+    const cardId = cardPart && cardPart !== 'none' ? Number(cardPart) : undefined
+    return { customerId, cardId }
+  }
+
   const assignMutation = useMutation({
     mutationFn: async () => {
       if (!selectedAgentId) {
         throw new Error('لطفاً یک کارشناس را انتخاب کنید')
       }
-      if (selectedCustomers.length === 0) {
+      if (selectedCustomerKeys.length === 0) {
         throw new Error('هیچ مشتری‌ای انتخاب نشده است')
       }
 
-      for (const customerId of selectedCustomers) {
-        const response = await customersApi.assignAgent(customerId, Number(selectedAgentId))
+      for (const key of selectedCustomerKeys) {
+        const { customerId, cardId } = parseSelectionKey(key)
+        const response = await customersApi.assignAgent(customerId, Number(selectedAgentId), cardId)
         if (!response.success) {
           throw new Error(response.error?.message || 'تخصیص کارشناس ناموفق بود')
         }
@@ -77,7 +88,7 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
     },
     onSuccess: () => {
       notifySuccess('تخصیص انجام شد', 'مشتریان انتخاب‌شده به کارشناس انتخاب‌شده تخصیص یافتند')
-      setSelectedCustomers([])
+      setSelectedCustomerKeys([])
       queryClient.invalidateQueries({ queryKey: ['assignment-customers', supervisorId] })
       queryClient.invalidateQueries({ queryKey: ['customers'] })
     },
@@ -91,34 +102,43 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
   const totalPages = pagination?.total_pages ?? 1
   const totalCustomers = pagination?.total ?? 0
 
+  const isCustomerSelected = (customer: CustomerListResponse['items'][number]) => {
+    const key = createSelectionKey(customer.id, customer.card_id)
+    return selectedCustomerKeys.includes(key)
+  }
+
   const allSelected = useMemo(() => {
     if (customers.length === 0) return false
-    return customers.every((customer) => selectedCustomers.includes(customer.id))
-  }, [customers, selectedCustomers])
+    return customers.every((customer) => isCustomerSelected(customer))
+  }, [customers, selectedCustomerKeys])
 
-  const toggleCustomer = (customerId: number, checked: boolean) => {
-    setSelectedCustomers((previous) => {
+  const toggleCustomer = (customer: CustomerListResponse['items'][number], checked: boolean) => {
+    const key = createSelectionKey(customer.id, customer.card_id)
+    setSelectedCustomerKeys((previous) => {
       if (checked) {
-        if (previous.includes(customerId)) return previous
-        return [...previous, customerId]
+        if (previous.includes(key)) return previous
+        return [...previous, key]
       }
-      return previous.filter((id) => id !== customerId)
+      return previous.filter((item) => item !== key)
     })
   }
 
   const handleToggleAll = (checked: boolean) => {
     if (checked) {
-      setSelectedCustomers((previous) => {
+      setSelectedCustomerKeys((previous) => {
         const newSelection = new Set(previous)
         for (const customer of customers) {
-          newSelection.add(customer.id)
+          newSelection.add(createSelectionKey(customer.id, customer.card_id))
         }
         return Array.from(newSelection)
       })
     } else {
-      setSelectedCustomers((previous) => previous.filter((id) => !customers.some((customer) => customer.id === id)))
+      const keysToRemove = new Set(customers.map((customer) => createSelectionKey(customer.id, customer.card_id)))
+      setSelectedCustomerKeys((previous) => previous.filter((key) => !keysToRemove.has(key)))
     }
   }
+
+  const selectedCount = selectedCustomerKeys.length
 
   return (
     <Card>
@@ -169,7 +189,7 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
             </div>
             <Button
               onClick={() => assignMutation.mutate()}
-              disabled={assignMutation.isPending || !selectedAgentId || selectedCustomers.length === 0}
+              disabled={assignMutation.isPending || !selectedAgentId || selectedCount === 0}
             >
               {assignMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               تخصیص مشتریان انتخاب‌شده
@@ -210,14 +230,17 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
               </thead>
               <tbody className="divide-y divide-border text-sm">
                 {customers.map((customer) => {
-                  const isSelected = selectedCustomers.includes(customer.id)
+                  const isSelected = isCustomerSelected(customer)
                   return (
-                    <tr key={customer.id} className={isSelected ? 'bg-primary/5' : undefined}>
+                    <tr
+                      key={`${customer.id}-${customer.card_id ?? 'none'}`}
+                      className={isSelected ? 'bg-primary/5' : undefined}
+                    >
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={(event) => toggleCustomer(customer.id, event.target.checked)}
+                          onChange={(event) => toggleCustomer(customer, event.target.checked)}
                           className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
                         />
                       </td>
@@ -237,8 +260,8 @@ export function CustomerAssignmentTab({ supervisorId }: CustomerAssignmentTabPro
 
         <div className="flex flex-col gap-3 border-t pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
           <span className="text-muted-foreground">
-            {selectedCustomers.length > 0
-              ? `${formatNumber(selectedCustomers.length)} مشتری انتخاب شده`
+            {selectedCount > 0
+              ? `${formatNumber(selectedCount)} مشتری انتخاب شده`
               : 'هیچ مشتری‌ای انتخاب نشده است'}
           </span>
           {pagination && totalPages > 1 && (

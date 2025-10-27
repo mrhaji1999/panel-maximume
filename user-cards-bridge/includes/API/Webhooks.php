@@ -46,6 +46,7 @@ class Webhooks extends BaseController {
 
         $customer_id = (int) $order->get_meta('_ucb_customer_id');
         $token = (string) $order->get_meta('_ucb_payment_token');
+        $card_id = (int) $order->get_meta('_ucb_card_id');
 
         if ($token) {
             $this->tokens->consume($token);
@@ -55,7 +56,7 @@ class Webhooks extends BaseController {
             $this->statuses->change_status($customer_id, 'upsell_paid', 0, [
                 'webhook' => true,
                 'order_id' => $order_id,
-            ]);
+            ], $card_id ?: null);
         }
 
         return $this->success([

@@ -242,31 +242,42 @@ export const customersApi = {
   getCustomerTabs: () =>
     apiClient.get<CustomerTabsResponse>('/customers/tabs'),
   
-  getCustomer: (id: number) =>
-    apiClient.get<CustomerDetail>(`/customers/${id}`),
-  
+  getCustomer: (id: number, cardId?: number) =>
+    apiClient.get<CustomerDetail>(`/customers/${id}`, {
+      params: cardId ? { card_id: cardId } : undefined,
+    }),
+
   updateCustomerStatus: (
     id: number,
     status: string,
-    options?: { reason?: string; meta?: Record<string, unknown> }
+    options?: { reason?: string; meta?: Record<string, unknown>; cardId?: number }
   ) =>
     apiClient.patch(`/customers/${id}/status`, {
       status,
       ...(options?.reason ? { reason: options.reason } : {}),
       ...(options?.meta ? { meta: options.meta } : {}),
+      ...(options?.cardId ? { card_id: options.cardId } : {}),
     }),
-  
+
   addCustomerNote: (id: number, note: string) =>
     apiClient.post(`/customers/${id}/notes`, { note }),
-  
-  assignSupervisor: (id: number, supervisorId: number) =>
-    apiClient.post(`/customers/${id}/assign-supervisor`, { supervisor_id: supervisorId }),
-  
-  assignAgent: (id: number, agentId: number) =>
-    apiClient.post(`/customers/${id}/assign-agent`, { agent_id: agentId }),
-  
-  sendNormalCode: (id: number) =>
-    apiClient.post(`/customers/${id}/normal/send-code`),
+
+  assignSupervisor: (id: number, supervisorId: number, cardId?: number) =>
+    apiClient.post(`/customers/${id}/assign-supervisor`, {
+      supervisor_id: supervisorId,
+      ...(cardId ? { card_id: cardId } : {}),
+    }),
+
+  assignAgent: (id: number, agentId: number, cardId?: number) =>
+    apiClient.post(`/customers/${id}/assign-agent`, {
+      agent_id: agentId,
+      ...(cardId ? { card_id: cardId } : {}),
+    }),
+
+  sendNormalCode: (id: number, cardId?: number) =>
+    apiClient.post(`/customers/${id}/normal/send-code`, {
+      ...(cardId ? { card_id: cardId } : {}),
+    }),
   
   initUpsell: (id: number, cardId: number, fieldKey: string) =>
     apiClient.post(`/customers/${id}/upsell/init`, { card_id: cardId, field_key: fieldKey }),
