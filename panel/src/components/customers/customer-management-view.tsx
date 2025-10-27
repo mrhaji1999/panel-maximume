@@ -61,6 +61,18 @@ const STATUS_LABELS: Record<CustomerStatus, string> = {
   canceled: 'انصراف داد',
 }
 
+const deriveCustomerRowKey = (customer: Customer): string => {
+  if (customer.entry_id != null && customer.entry_id > 0) {
+    return `${customer.id}-${customer.entry_id}`
+  }
+
+  if (customer.card_id && customer.card_id > 0) {
+    return `${customer.id}-${customer.card_id}`
+  }
+
+  return `${customer.id}-none`
+}
+
 interface StatusTab {
   key: StatusFilter
   label: string
@@ -618,7 +630,7 @@ export function CustomerManagementView({
             <div className="space-y-3">
               {customers.map((customer: Customer) => (
                 <CustomerRow
-                  key={`${customer.id}-${customer.card_id ?? 'none'}`}
+                  key={deriveCustomerRowKey(customer)}
                   customer={customer}
                   disabled={isMutating}
                   onStatusChange={handleStatusChange}
@@ -736,7 +748,28 @@ function CustomerRow({
   const [selectedStatus, setSelectedStatus] = useState<CustomerStatus>(customer.status)
   const [selectedField, setSelectedField] = useState<string>(customer.upsell_field_key ?? '')
 
-  const rowKey = `${customer.id}-${customer.card_id ?? 'none'}`
+  const formFields = useMemo<Array<{ label: string; value: string }>>(() => {
+    if (!Array.isArray(customer.form_data)) {
+      return []
+    }
+
+    const seen = new Set<string>()
+    return customer.form_data
+      .map((field) => ({
+        label: typeof field.label === 'string' ? field.label.trim() : '',
+        value: typeof field.value === 'string' ? field.value.trim() : '',
+      }))
+      .filter((field) => field.label !== '' && field.value !== '')
+      .filter((field) => {
+        if (seen.has(field.label)) {
+          return false
+        }
+        seen.add(field.label)
+        return true
+      })
+  }, [customer.form_data])
+
+  const rowKey = deriveCustomerRowKey(customer)
   const isStatusUpdating = statusUpdatingKey === rowKey
   const isNormalSending = normalSmsCustomerKey === rowKey
   const isUpsellSubmitting = upsellCustomerKey === rowKey
@@ -766,6 +799,8 @@ function CustomerRow({
     : scheduleDate
       ? `تماس در تاریخ ${scheduleDate}`
       : 'تماس'
+  const hasFormMetadata = Boolean(customer.random_code || scheduleDate || scheduleTime)
+  const hasFormFields = formFields.length > 0
 
   const {
     data: cardFields = [],
@@ -983,6 +1018,25 @@ function CustomerRow({
         )}
       </div>
 
+      {hasFormMetadata && (
+        <div className="mt-4 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+          <InfoRow label="کد رزرو" value={customer.random_code ? customer.random_code : '-'} />
+          <InfoRow label="تاریخ فرم" value={scheduleDate || '-'} />
+          <InfoRow label="ساعت فرم" value={scheduleTime || '-'} />
+        </div>
+      )}
+
+      {hasFormFields && (
+        <div className="mt-4 space-y-2">
+          <h4 className="text-xs font-semibold text-muted-foreground">اطلاعات فرم</h4>
+          <div className="grid gap-2 md:grid-cols-2">
+            {formFields.map((field) => (
+              <InfoRow key={`${rowKey}-${field.label}`} label={field.label} value={field.value} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {(showNoteButton || showAssignSupervisorButton || showAssignAgentButton || showCallAction || showFormInfoButton) && (
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           {showCallAction && customer.phone && (
@@ -1043,6 +1097,15 @@ function CustomerRow({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-background/60 px-3 py-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{value || '-'}</span>
     </div>
   )
 }
