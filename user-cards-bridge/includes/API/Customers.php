@@ -31,6 +31,18 @@ class Customers extends BaseController {
             'permission_callback' => [$this, 'require_access'],
         ]);
 
+        register_rest_route($this->namespace, '/customers/assignable', [
+            'methods'  => 'GET',
+            'callback' => [$this, 'list_assignable_customers'],
+            'permission_callback' => [$this, 'require_supervisor'],
+        ]);
+
+        register_rest_route($this->namespace, '/customers/assign-agent-bulk', [
+            'methods'  => 'POST',
+            'callback' => [$this, 'assign_agent_bulk'],
+            'permission_callback' => [$this, 'require_supervisor'],
+        ]);
+
         register_rest_route($this->namespace, '/customers/tabs', [
             'methods'  => 'GET',
             'callback' => [$this, 'customer_tabs'],
@@ -88,12 +100,17 @@ class Customers extends BaseController {
         $page = max(1, (int) $request->get_param('page') ?: 1);
         $per_page = min(100, max(1, (int) $request->get_param('per_page') ?: 20));
 
-        $role = Roles::get_user_role(get_current_user_id());
+        $user_id = get_current_user_id();
+        $role = Roles::get_user_role($user_id);
 
         if ('supervisor' === $role) {
-            $filters['supervisor_id'] = get_current_user_id();
+            $filters['supervisor_id'] = $user_id;
+            $supervisor_cards = get_user_meta($user_id, 'ucb_supervisor_cards', true);
+            if (!empty($supervisor_cards) && is_array($supervisor_cards)) {
+                $filters['card_id_in'] = $supervisor_cards;
+            }
         } elseif ('agent' === $role) {
-            $filters['agent_id'] = get_current_user_id();
+            $filters['agent_id'] = $user_id;
         }
 
         $result = $this->customers->list_customers($filters, $page, $per_page);
@@ -102,6 +119,40 @@ class Customers extends BaseController {
             'items' => $result['items'],
             'pagination' => $this->paginate($page, $per_page, $result['total']),
         ]);
+    }
+
+    public function list_assignable_customers(WP_REST_Request $request) {
+        $filters = [
+            'supervisor_id' => get_current_user_id(),
+            'agent_id' => 0, // Unassigned
+        ];
+
+        $supervisor_cards = get_user_meta(get_current_user_id(), 'ucb_supervisor_cards', true);
+        if (!empty($supervisor_cards) && is_array($supervisor_cards)) {
+            $filters['card_id_in'] = $supervisor_cards;
+        }
+
+        $result = $this->customers->list_customers($filters, 1, 1000);
+
+        return $this->success([
+            'items' => $result['items'],
+        ]);
+    }
+
+    public function assign_agent_bulk(WP_REST_Request $request) {
+        $submission_ids = $request->get_param('submission_ids');
+        $agent_id = (int) $request->get_param('agent_id');
+
+        if (empty($submission_ids) || !is_array($submission_ids) || $agent_id <= 0) {
+            return $this->error('ucb_invalid_params', __('Invalid parameters.', 'user-cards-bridge'), 400);
+        }
+
+        foreach ($submission_ids as $submission_id) {
+            $customer_id = (int) get_post_meta($submission_id, '_uc_user_id', true);
+            $this->customers->assign_agent($customer_id, $agent_id, null, $submission_id);
+        }
+
+        return $this->success(['message' => __('Agents assigned successfully.', 'user-cards-bridge')]);
     }
 
     public function customer_tabs(WP_REST_Request $request) {
@@ -272,6 +323,10 @@ class Customers extends BaseController {
         }
         
         return Security::current_user_has_role(['company_manager', 'supervisor', 'agent']) || current_user_can('ucb_manage_all');
+    }
+
+    public function require_supervisor(WP_REST_Request $request): bool {
+        return $this->is_authenticated() && Security::current_user_has_role(['supervisor']);
     }
 
     public function require_customer_access(WP_REST_Request $request): bool {

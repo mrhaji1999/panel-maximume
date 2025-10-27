@@ -181,11 +181,8 @@ class UC_Ajax {
         update_post_meta($sub_id, '_uc_surprise', $surprise);
 
         if ($assigned_supervisor > 0) {
-            update_user_meta($user_id, 'ucb_customer_assigned_supervisor', $assigned_supervisor);
             update_post_meta($sub_id, '_uc_supervisor_id', $assigned_supervisor);
         }
-
-        update_user_meta($user_id, 'ucb_customer_card_id', $card_id);
 
         $assigned_agent = (int) get_user_meta($user_id, 'ucb_customer_assigned_agent', true);
         if ($assigned_agent > 0) {

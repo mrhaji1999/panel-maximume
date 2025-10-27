@@ -281,6 +281,15 @@ export const customersApi = {
   
   initUpsell: (id: number, cardId: number, fieldKey: string) =>
     apiClient.post(`/customers/${id}/upsell/init`, { card_id: cardId, field_key: fieldKey }),
+
+  getAssignableCustomers: () =>
+    apiClient.get<CustomerListResponse>('/customers/assignable'),
+
+  assignAgentBulk: (submissionIds: number[], agentId: number) =>
+    apiClient.post('/customers/assign-agent-bulk', {
+      submission_ids: submissionIds,
+      agent_id: agentId,
+    }),
 }
 
 // Cards API
