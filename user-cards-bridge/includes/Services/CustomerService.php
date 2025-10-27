@@ -110,6 +110,19 @@ class CustomerService {
             $search = sanitize_text_field($filters['search']);
             $args['search'] = '*' . $search . '*';
             $args['search_columns'] = ['user_login', 'user_email', 'display_name'];
+            $meta_query_clauses[] = [
+                'relation' => 'OR',
+                [
+                    'key'     => 'ucb_customer_email',
+                    'value'   => $search,
+                    'compare' => 'LIKE',
+                ],
+                [
+                    'key'     => 'ucb_customer_phone',
+                    'value'   => $search,
+                    'compare' => 'LIKE',
+                ],
+            ];
         }
 
         $query = new WP_User_Query($args);
@@ -186,7 +199,11 @@ class CustomerService {
 
         if (!empty($filters['search'])) {
             $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
-            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} email_meta ON email_meta.user_id = users.ID AND email_meta.meta_key = 'ucb_customer_email'";
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} phone_meta ON phone_meta.user_id = users.ID AND phone_meta.meta_key = 'ucb_customer_phone'";
+            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s OR email_meta.meta_value LIKE %s OR phone_meta.meta_value LIKE %s)';
+            $params[] = $search;
+            $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
@@ -324,7 +341,11 @@ class CustomerService {
 
         if (!empty($filters['search'])) {
             $search = '%' . $wpdb->esc_like(sanitize_text_field($filters['search'])) . '%';
-            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s)';
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} email_meta ON email_meta.user_id = users.ID AND email_meta.meta_key = 'ucb_customer_email'";
+            $joins[] = "LEFT JOIN {$wpdb->usermeta} phone_meta ON phone_meta.user_id = users.ID AND phone_meta.meta_key = 'ucb_customer_phone'";
+            $where[] = '(users.user_login LIKE %s OR users.user_email LIKE %s OR users.display_name LIKE %s OR email_meta.meta_value LIKE %s OR phone_meta.meta_value LIKE %s)';
+            $params[] = $search;
+            $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
@@ -410,7 +431,7 @@ class CustomerService {
         return [
             'id'                        => $user_id,
             'username'                 => $user->user_login,
-            'email'                    => $user->user_email,
+            'email'                    => $this->get_customer_email($user_id),
             'first_name'               => $user->first_name,
             'last_name'                => $user->last_name,
             'display_name'             => $user->display_name,
@@ -432,6 +453,25 @@ class CustomerService {
             'form_data'                => $form_data,
             'form_schedule'            => $submission_data['schedule'],
         ];
+    }
+
+    /**
+     * Retrieve stored email for customer.
+     */
+    protected function get_customer_email(int $user_id): ?string {
+        $email = get_user_meta($user_id, 'ucb_customer_email', true);
+
+        if (is_string($email) && $email !== '') {
+            return sanitize_email($email) ?: $email;
+        }
+
+        $user = get_user_by('id', $user_id);
+
+        if ($user instanceof WP_User) {
+            return $user->user_email ?: null;
+        }
+
+        return null;
     }
 
     /**

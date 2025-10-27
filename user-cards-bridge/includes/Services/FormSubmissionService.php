@@ -124,34 +124,27 @@ class FormSubmissionService {
             'created_at' => current_time('mysql')
         ];
     }
-    
+
     /**
      * Create customer record
      */
     protected function create_customer($customer_data) {
-        // Check if customer already exists by email
-        $existing_customer = get_user_by('email', $customer_data['email']);
+        $username = $this->generate_unique_username($customer_data);
+        $user_email = $this->generate_unique_email($customer_data['email'] ?? '');
 
-        if ($existing_customer) {
-            $customer_id = $existing_customer->ID;
-        } else {
-            // Create new WordPress user
-            $user_id = wp_create_user(
-                $customer_data['email'],
-                wp_generate_password(),
-                $customer_data['email']
-            );
+        $user_id = wp_create_user(
+            $username,
+            wp_generate_password(),
+            $user_email
+        );
 
-            if (is_wp_error($user_id)) {
-                return $user_id;
-            }
-
-            $customer_id = $user_id;
+        if (is_wp_error($user_id)) {
+            return $user_id;
         }
 
-        $this->update_customer_profile($customer_id, $customer_data);
+        $this->update_customer_profile($user_id, $customer_data);
 
-        return $customer_id;
+        return $user_id;
     }
 
     /**
@@ -190,6 +183,79 @@ class FormSubmissionService {
 
         update_user_meta($customer_id, 'ucb_customer_phone', $customer_data['phone']);
         update_user_meta($customer_id, 'ucb_customer_form_data', $customer_data['form_data']);
+        update_user_meta($customer_id, 'ucb_customer_email', $customer_data['email']);
+        if (!empty($customer_data['email'])) {
+            update_user_meta(
+                $customer_id,
+                'ucb_customer_email_normalized',
+                $this->normalize_email($customer_data['email'])
+            );
+        }
+    }
+
+    /**
+     * Generate a unique username for the customer record.
+     */
+    protected function generate_unique_username(array $customer_data): string {
+        $base = sanitize_user($customer_data['first_name'] . '.' . $customer_data['last_name'], true);
+
+        if ($base === '') {
+            $base = sanitize_user($customer_data['email'] ?? '', true);
+        }
+
+        if ($base === '') {
+            $base = 'uc_customer';
+        }
+
+        $username = $base;
+        $suffix = 1;
+
+        while (username_exists($username)) {
+            $username = $base . '_' . $suffix;
+            $suffix++;
+        }
+
+        return $username;
+    }
+
+    /**
+     * Generate a unique email address for storing inside WordPress.
+     */
+    protected function generate_unique_email(string $raw_email): string {
+        $email = is_email($raw_email) ? strtolower($raw_email) : '';
+
+        if ($email !== '' && !email_exists($email)) {
+            return $email;
+        }
+
+        $local = 'customer';
+        $domain = 'example.com';
+
+        if ($email !== '') {
+            [$local_part, $domain_part] = array_pad(explode('@', $email, 2), 2, '');
+            if ($local_part !== '') {
+                $candidate = sanitize_title(str_replace(['+', '.'], '_', $local_part));
+                if ($candidate !== '') {
+                    $local = $candidate;
+                }
+            }
+            if ($domain_part !== '') {
+                $domain = $domain_part;
+            }
+        }
+
+        do {
+            $generated = sprintf('%s+%s@%s', $local, wp_generate_password(8, false), $domain);
+        } while (email_exists($generated));
+
+        return $generated;
+    }
+
+    /**
+     * Normalize email for consistent searching.
+     */
+    protected function normalize_email(string $email): string {
+        return strtolower(trim($email));
     }
 
     /**
@@ -295,12 +361,17 @@ class FormSubmissionService {
         $forms = [];
         
         foreach ($users as $user) {
+            $email_meta = get_user_meta($user->ID, 'ucb_customer_email', true);
+            $email_value = null;
+            if (is_string($email_meta) && $email_meta !== '') {
+                $email_value = sanitize_email($email_meta) ?: $email_meta;
+            }
             $forms[] = [
                 'id' => $user->ID,
                 'first_name' => $user->first_name,
                 'last_name' => $user->last_name,
                 'display_name' => $user->display_name,
-                'email' => $user->user_email,
+                'email' => $email_value ?: $user->user_email,
                 'phone' => get_user_meta($user->ID, 'ucb_customer_phone', true),
                 'status' => get_user_meta($user->ID, 'ucb_customer_status', true),
                 'card_id' => get_user_meta($user->ID, 'ucb_customer_card_id', true),
