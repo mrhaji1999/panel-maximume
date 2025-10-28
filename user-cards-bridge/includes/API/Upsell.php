@@ -46,9 +46,15 @@ class Upsell extends BaseController {
         $customer_id = (int) $request->get_param('id');
         $card_id = (int) $request->get_param('card_id');
         $field_key = sanitize_text_field($request->get_param('field_key'));
+        $submission_id = $request->get_param('submission_id');
+        $submission_id = $submission_id !== null ? (int) $submission_id : null;
 
         if (!$card_id || !$field_key) {
             return $this->error('ucb_missing_params', __('card_id and field_key are required.', 'user-cards-bridge'), 400);
+        }
+
+        if (!Security::can_manage_customer($customer_id, $card_id, $submission_id)) {
+            return $this->error('ucb_forbidden', __('Insufficient permissions.', 'user-cards-bridge'), 403);
         }
 
         $fields = $this->cards->get_card_fields($card_id);
@@ -74,6 +80,7 @@ class Upsell extends BaseController {
             'field_key'   => $field_key,
             'label'       => $selected['label'],
             'amount'      => $selected['amount'],
+            'submission_id' => $submission_id,
         ]);
 
         if (is_wp_error($order)) {
@@ -96,13 +103,22 @@ class Upsell extends BaseController {
         update_user_meta($customer_id, 'ucb_upsell_amount', (float) $selected['amount']);
         update_user_meta($customer_id, 'ucb_upsell_pay_link', $order['pay_link']);
 
+        if ($submission_id) {
+            update_post_meta($submission_id, '_uc_upsell_field_key', sanitize_text_field($selected['key']));
+            update_post_meta($submission_id, '_uc_upsell_field_label', sanitize_text_field($selected['label']));
+            update_post_meta($submission_id, '_uc_upsell_amount', (float) $selected['amount']);
+            update_post_meta($submission_id, '_uc_upsell_pay_link', esc_url_raw($order['pay_link']));
+            update_post_meta($submission_id, '_uc_upsell_order_id', (int) $order['order_id']);
+        }
+
         $this->statuses->change_status($customer_id, 'upsell_pending', get_current_user_id(), [
             'order_id'   => $order['order_id'],
             'field_key'  => $selected['key'],
             'field_label'=> $selected['label'],
             'amount'     => (float) $selected['amount'],
             'pay_link'   => $order['pay_link'],
-        ], $card_id);
+            'submission_id' => $submission_id,
+        ], $card_id, $submission_id);
 
         return $this->success([
             'order_id'  => $order['order_id'],
@@ -117,8 +133,10 @@ class Upsell extends BaseController {
         $customer_id = (int) $request->get_param('id');
         $card_id = $request->get_param('card_id');
         $card_id = $card_id !== null ? (int) $card_id : null;
+        $submission_id = $request->get_param('submission_id');
+        $submission_id = $submission_id !== null ? (int) $submission_id : null;
 
-        $result = $this->statuses->change_status($customer_id, 'normal', get_current_user_id(), [], $card_id);
+        $result = $this->statuses->change_status($customer_id, 'normal', get_current_user_id(), ['submission_id' => $submission_id], $card_id, $submission_id);
 
         if (is_wp_error($result)) {
             return $this->from_wp_error($result);

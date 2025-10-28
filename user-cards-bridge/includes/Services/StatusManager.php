@@ -338,7 +338,7 @@ class StatusManager {
     /**
      * Change customer status
      */
-    public function change_status($customer_id, $new_status, $changed_by = null, $meta = [], $card_id = null) {
+    public function change_status($customer_id, $new_status, $changed_by = null, $meta = [], $card_id = null, $submission_id = null) {
         if (!$this->status_exists($new_status)) {
             return new \WP_Error(
                 'invalid_status',
@@ -352,13 +352,58 @@ class StatusManager {
         $cards = $card_repository->get_cards($customer_id);
 
         $old_status = null;
-        if ($card_id && isset($cards[$card_id])) {
-            $old_status = $cards[$card_id]['status'] ?? null;
-        } elseif (!empty($cards)) {
-            $first = reset($cards);
-            $old_status = $first['status'] ?? null;
-        } else {
-            $old_status = get_user_meta($customer_id, 'ucb_customer_status', true);
+        $effective_submission_id = null;
+
+        if ($submission_id) {
+            $submission = get_post($submission_id);
+
+            if (!$submission || 'uc_submission' !== $submission->post_type) {
+                return new \WP_Error(
+                    'invalid_submission',
+                    __('Invalid submission provided.', UCB_TEXT_DOMAIN),
+                    ['status' => 400]
+                );
+            }
+
+            $owner_id = (int) get_post_meta($submission_id, '_uc_user_id', true);
+            if ($owner_id !== (int) $customer_id) {
+                return new \WP_Error(
+                    'invalid_submission_owner',
+                    __('Submission does not belong to the specified customer.', UCB_TEXT_DOMAIN),
+                    ['status' => 400]
+                );
+            }
+
+            $effective_submission_id = $submission_id;
+
+            if (!$card_id) {
+                $submission_card = (int) get_post_meta($submission_id, '_uc_card_id', true);
+                if ($submission_card > 0) {
+                    $card_id = $submission_card;
+                }
+            }
+
+            $status_meta = get_post_meta($submission_id, '_uc_status', true);
+            if (is_string($status_meta) && $status_meta !== '') {
+                $old_status = $status_meta;
+            }
+        }
+
+        if (null === $old_status) {
+            if ($card_id && isset($cards[$card_id])) {
+                $old_status = $cards[$card_id]['status'] ?? null;
+                if (isset($cards[$card_id]['submission_id']) && !$effective_submission_id) {
+                    $effective_submission_id = (int) $cards[$card_id]['submission_id'];
+                }
+            } elseif (!empty($cards)) {
+                $first = reset($cards);
+                $old_status = $first['status'] ?? null;
+                if (isset($first['submission_id']) && !$effective_submission_id) {
+                    $effective_submission_id = (int) $first['submission_id'];
+                }
+            } else {
+                $old_status = get_user_meta($customer_id, 'ucb_customer_status', true);
+            }
         }
 
         // Check if transition is allowed
@@ -369,7 +414,7 @@ class StatusManager {
                 ['status' => 400]
             );
         }
-        
+
         // Update status
         update_user_meta($customer_id, 'ucb_customer_status', $new_status);
 
@@ -381,9 +426,20 @@ class StatusManager {
             }
         }
 
+        if ($effective_submission_id) {
+            update_post_meta($effective_submission_id, '_uc_status', $new_status);
+            if ($card_id) {
+                $card_repository->update_submission($customer_id, (int) $card_id, (int) $effective_submission_id);
+            }
+        }
+
         // Log status change
         if (null !== $card_id) {
             $meta['card_id'] = (int) $card_id;
+        }
+
+        if ($effective_submission_id) {
+            $meta['submission_id'] = (int) $effective_submission_id;
         }
 
         $this->log_status_change($customer_id, $old_status, $new_status, $changed_by, $meta);
@@ -423,15 +479,16 @@ class StatusManager {
      */
     private function handle_status_actions($customer_id, $status, $meta) {
         $card_id = isset($meta['card_id']) ? (int) $meta['card_id'] : null;
+        $submission_id = isset($meta['submission_id']) ? (int) $meta['submission_id'] : null;
         switch ($status) {
             case 'normal':
-                $this->handle_normal_status($customer_id, $meta, $card_id);
+                $this->handle_normal_status($customer_id, $meta, $card_id, $submission_id);
                 break;
             case 'upsell_pending':
-                $this->handle_upsell_pending_status($customer_id, $meta, $card_id);
+                $this->handle_upsell_pending_status($customer_id, $meta, $card_id, $submission_id);
                 break;
             case 'upsell_paid':
-                $this->handle_upsell_paid_status($customer_id, $meta, $card_id);
+                $this->handle_upsell_paid_status($customer_id, $meta, $card_id, $submission_id);
                 break;
         }
     }
@@ -439,7 +496,7 @@ class StatusManager {
     /**
      * Handle normal status - send random code
      */
-    private function handle_normal_status($customer_id, $meta, ?int $card_id = null) {
+    private function handle_normal_status($customer_id, $meta, ?int $card_id = null, ?int $submission_id = null) {
         $pending_order_id = (int) get_user_meta($customer_id, 'ucb_upsell_order_id', true);
         $revoked_token = false;
 
@@ -471,6 +528,14 @@ class StatusManager {
         delete_user_meta($customer_id, 'ucb_upsell_amount');
         delete_user_meta($customer_id, 'ucb_upsell_pay_link');
 
+        if ($submission_id) {
+            delete_post_meta($submission_id, '_uc_upsell_order_id');
+            delete_post_meta($submission_id, '_uc_upsell_field_key');
+            delete_post_meta($submission_id, '_uc_upsell_field_label');
+            delete_post_meta($submission_id, '_uc_upsell_amount');
+            delete_post_meta($submission_id, '_uc_upsell_pay_link');
+        }
+
         if ($pending_order_id > 0) {
             \UCB\Logger::log('info', 'Upsell pending status reset to normal', [
                 'customer_id' => $customer_id,
@@ -487,6 +552,10 @@ class StatusManager {
         if ($card_id) {
             $repo = new \UCB\Services\CustomerCardRepository();
             $repo->update_random_code($customer_id, $card_id, $random_code);
+        }
+
+        if ($submission_id) {
+            update_post_meta($submission_id, '_uc_surprise', $random_code);
         }
 
         $phone = get_user_meta($customer_id, 'phone', true);
@@ -509,7 +578,7 @@ class StatusManager {
     /**
      * Handle upsell pending status
      */
-    private function handle_upsell_pending_status($customer_id, $meta, ?int $card_id = null) {
+    private function handle_upsell_pending_status($customer_id, $meta, ?int $card_id = null, ?int $submission_id = null) {
         // Store order information
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_order_id', $meta['order_id']);
@@ -531,6 +600,24 @@ class StatusManager {
             update_user_meta($customer_id, 'ucb_upsell_pay_link', esc_url_raw($meta['pay_link']));
         }
 
+        if ($submission_id) {
+            if (isset($meta['order_id'])) {
+                update_post_meta($submission_id, '_uc_upsell_order_id', (int) $meta['order_id']);
+            }
+            if (isset($meta['field_key'])) {
+                update_post_meta($submission_id, '_uc_upsell_field_key', sanitize_text_field($meta['field_key']));
+            }
+            if (isset($meta['field_label'])) {
+                update_post_meta($submission_id, '_uc_upsell_field_label', sanitize_text_field($meta['field_label']));
+            }
+            if (isset($meta['amount'])) {
+                update_post_meta($submission_id, '_uc_upsell_amount', floatval($meta['amount']));
+            }
+            if (isset($meta['pay_link'])) {
+                update_post_meta($submission_id, '_uc_upsell_pay_link', esc_url_raw($meta['pay_link']));
+            }
+        }
+
         if ($card_id) {
             $repo = new \UCB\Services\CustomerCardRepository();
             $repo->update_upsell($customer_id, $card_id, [
@@ -546,7 +633,7 @@ class StatusManager {
     /**
      * Handle upsell paid status
      */
-    private function handle_upsell_paid_status($customer_id, $meta, ?int $card_id = null) {
+    private function handle_upsell_paid_status($customer_id, $meta, ?int $card_id = null, ?int $submission_id = null) {
         // Clear pending order info but keep audit trail
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_last_order_id', $meta['order_id']);
@@ -554,6 +641,14 @@ class StatusManager {
 
         delete_user_meta($customer_id, 'ucb_upsell_order_id');
         delete_user_meta($customer_id, 'ucb_upsell_pay_link');
+
+        if ($submission_id) {
+            if (isset($meta['order_id'])) {
+                update_post_meta($submission_id, '_uc_upsell_last_order_id', (int) $meta['order_id']);
+            }
+            delete_post_meta($submission_id, '_uc_upsell_order_id');
+            delete_post_meta($submission_id, '_uc_upsell_pay_link');
+        }
 
         if ($card_id) {
             $repo = new \UCB\Services\CustomerCardRepository();

@@ -250,37 +250,50 @@ export const customersApi = {
   updateCustomerStatus: (
     id: number,
     status: string,
-    options?: { reason?: string; meta?: Record<string, unknown>; cardId?: number }
+    options?: {
+      reason?: string
+      meta?: Record<string, unknown>
+      cardId?: number
+      entryId?: number
+    }
   ) =>
     apiClient.patch(`/customers/${id}/status`, {
       status,
       ...(options?.reason ? { reason: options.reason } : {}),
       ...(options?.meta ? { meta: options.meta } : {}),
       ...(options?.cardId ? { card_id: options.cardId } : {}),
+      ...(options?.entryId ? { submission_id: options.entryId } : {}),
     }),
 
   addCustomerNote: (id: number, note: string) =>
     apiClient.post(`/customers/${id}/notes`, { note }),
 
-  assignSupervisor: (id: number, supervisorId: number, cardId?: number) =>
+  assignSupervisor: (id: number, supervisorId: number, cardId?: number, entryId?: number) =>
     apiClient.post(`/customers/${id}/assign-supervisor`, {
       supervisor_id: supervisorId,
       ...(cardId ? { card_id: cardId } : {}),
+      ...(entryId ? { submission_id: entryId } : {}),
     }),
 
-  assignAgent: (id: number, agentId: number, cardId?: number) =>
+  assignAgent: (id: number, agentId: number, cardId?: number, entryId?: number) =>
     apiClient.post(`/customers/${id}/assign-agent`, {
       agent_id: agentId,
       ...(cardId ? { card_id: cardId } : {}),
+      ...(entryId ? { submission_id: entryId } : {}),
     }),
 
-  sendNormalCode: (id: number, cardId?: number) =>
+  sendNormalCode: (id: number, cardId?: number, entryId?: number) =>
     apiClient.post(`/customers/${id}/normal/send-code`, {
       ...(cardId ? { card_id: cardId } : {}),
+      ...(entryId ? { submission_id: entryId } : {}),
     }),
-  
-  initUpsell: (id: number, cardId: number, fieldKey: string) =>
-    apiClient.post(`/customers/${id}/upsell/init`, { card_id: cardId, field_key: fieldKey }),
+
+  initUpsell: (id: number, cardId: number, fieldKey: string, entryId?: number) =>
+    apiClient.post(`/customers/${id}/upsell/init`, {
+      card_id: cardId,
+      field_key: fieldKey,
+      ...(entryId ? { submission_id: entryId } : {}),
+    }),
 
   getAssignableCustomers: () =>
     apiClient.get<CustomerListResponse>('/customers/assignable'),
