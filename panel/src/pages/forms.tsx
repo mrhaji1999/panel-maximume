@@ -24,6 +24,7 @@ import {
 } from '@/lib/utils'
 import { useDebounce } from '@/hooks/useDebounce'
 import { FileText } from 'lucide-react'
+import { useAuth } from '@/store/authStore'
 
 const PER_PAGE = 20
 
@@ -34,12 +35,35 @@ type FilterState = {
 }
 
 export function FormsPage() {
+  const { user } = useAuth()
   const [filters, setFilters] = useState<FilterState>({ search: '', page: 1 })
   const debouncedSearch = useDebounce(filters.search, 400)
+
+  const supervisorId = user?.role === 'supervisor' ? user.id : undefined
+  const agentId = user?.role === 'agent' ? user.id : undefined
+  const assignedCardIds = useMemo(
+    () => (user?.assigned_cards ? [...user.assigned_cards] : []),
+    [user?.assigned_cards]
+  )
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, page: 1 }))
   }, [debouncedSearch, filters.cardId])
+
+  useEffect(() => {
+    if (user?.role !== 'supervisor' && user?.role !== 'agent') {
+      return
+    }
+
+    if (filters.cardId && !assignedCardIds.length) {
+      setFilters((prev) => ({ ...prev, cardId: undefined }))
+      return
+    }
+
+    if (filters.cardId && !assignedCardIds.includes(filters.cardId)) {
+      setFilters((prev) => ({ ...prev, cardId: undefined }))
+    }
+  }, [assignedCardIds, filters.cardId, user?.role])
 
   const cardsQuery = useQuery({
     queryKey: ['cards', { per_page: 100 }],
@@ -53,7 +77,16 @@ export function FormsPage() {
   })
 
   const formsQuery = useQuery({
-    queryKey: ['forms', { page: filters.page, per_page: PER_PAGE, card_id: filters.cardId }],
+    queryKey: [
+      'forms',
+      {
+        page: filters.page,
+        per_page: PER_PAGE,
+        card_id: filters.cardId,
+        supervisor_id: supervisorId,
+        agent_id: agentId,
+      },
+    ],
     queryFn: async () => {
       const params: FormFilters = {
         page: filters.page,
@@ -61,6 +94,12 @@ export function FormsPage() {
       }
       if (filters.cardId) {
         params.card_id = filters.cardId
+      }
+      if (supervisorId) {
+        params.supervisor_id = supervisorId
+      }
+      if (agentId) {
+        params.agent_id = agentId
       }
 
       const response = await formsApi.getForms(params)
@@ -73,17 +112,50 @@ export function FormsPage() {
   })
 
   const cards = cardsQuery.data?.items ?? []
+  const availableCards = useMemo(() => {
+    if (user?.role === 'supervisor') {
+      if (!assignedCardIds.length) {
+        return []
+      }
+      return cards.filter((card) => assignedCardIds.includes(card.id))
+    }
+    if (user?.role === 'agent' && user?.supervisor_id) {
+      // Agents should also only see cards related to their supervisor assignments if available
+      if (!assignedCardIds.length) {
+        return cards
+      }
+      return cards.filter((card) => assignedCardIds.includes(card.id))
+    }
+    return cards
+  }, [assignedCardIds, cards, user?.role, user?.supervisor_id])
+
   const forms = formsQuery.data?.items ?? []
+  const accessibleForms = useMemo(() => {
+    return forms.filter((form: FormSubmission) => {
+      if (supervisorId) {
+        if (form.meta.supervisor_id && form.meta.supervisor_id !== supervisorId) {
+          return false
+        }
+        if (assignedCardIds.length && !assignedCardIds.includes(form.meta.card_id)) {
+          return false
+        }
+      }
+      if (agentId) {
+        return form.meta.agent_id === agentId
+      }
+      return true
+    })
+  }, [agentId, assignedCardIds, forms, supervisorId])
   const pagination = formsQuery.data?.pagination
   const totalPages = pagination?.total_pages ?? 1
   const totalForms = pagination?.total ?? 0
 
   const filteredForms = useMemo(() => {
     if (!debouncedSearch) {
-      return forms
+      return accessibleForms
     }
     const keyword = debouncedSearch.toLowerCase()
-    return forms.filter((form: FormSubmission) => {
+    return accessibleForms.filter((form: FormSubmission) => {
       if (form.title?.toLowerCase().includes(keyword)) {
         return true
       }
@@ -95,7 +167,7 @@ export function FormsPage() {
       }
       return false
     })
-  }, [forms, debouncedSearch])
+  }, [accessibleForms, debouncedSearch])
 
   const isLoading = formsQuery.isLoading
   const isError = formsQuery.isError
@@ -137,7 +209,7 @@ export function FormsPage() {
               }
             >
               <option value="">همه کارت‌ها</option>
-              {cards.map((card) => (
+              {availableCards.map((card) => (
                 <option key={card.id} value={card.id}>
                   {card.title}
                 </option>
