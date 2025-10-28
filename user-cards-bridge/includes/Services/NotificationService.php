@@ -20,12 +20,16 @@ class NotificationService {
      *
      * @return array<string, mixed>|WP_Error
      */
-    public function send_normal_code(int $customer_id, ?int $card_id = null) {
+    public function send_normal_code(int $customer_id, ?int $card_id = null, ?int $submission_id = null) {
         $code = strtoupper(wp_generate_password(8, false, false));
         update_user_meta($customer_id, 'ucb_customer_random_code', $code);
         if ($card_id) {
             $repo = new CustomerCardRepository();
             $repo->update_random_code($customer_id, $card_id, $code);
+        }
+
+        if ($submission_id) {
+            update_post_meta($submission_id, '_uc_surprise', $code);
         }
 
         $phone = get_user_meta($customer_id, 'phone', true);

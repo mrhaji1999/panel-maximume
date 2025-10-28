@@ -271,11 +271,19 @@ export function CustomerManagementView({
   const updateStatusMutation = useMutation<
     unknown,
     unknown,
-    { customerId: number; cardId?: number; status: CustomerStatus; reason?: string; meta?: Record<string, unknown> }
+    {
+      customerId: number
+      cardId?: number
+      entryId?: number
+      status: CustomerStatus
+      reason?: string
+      meta?: Record<string, unknown>
+    }
   >({
     mutationFn: async ({
       customerId,
       cardId,
+      entryId,
       status,
       reason,
       meta,
@@ -284,6 +292,7 @@ export function CustomerManagementView({
         reason,
         meta,
         cardId,
+        entryId,
       })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در تغییر وضعیت')
@@ -300,9 +309,13 @@ export function CustomerManagementView({
     },
   })
 
-  const sendNormalCodeMutation = useMutation<unknown, unknown, { customerId: number; cardId?: number }>({
-    mutationFn: async ({ customerId, cardId }) => {
-      const response = await customersApi.sendNormalCode(customerId, cardId)
+  const sendNormalCodeMutation = useMutation<
+    unknown,
+    unknown,
+    { customerId: number; cardId?: number; entryId?: number }
+  >({
+    mutationFn: async ({ customerId, cardId, entryId }) => {
+      const response = await customersApi.sendNormalCode(customerId, cardId, entryId)
       if (!response.success) {
         throw new Error(response.error?.message || 'ارسال پیامک ناموفق بود')
       }
@@ -338,12 +351,14 @@ export function CustomerManagementView({
       customerId,
       supervisorId,
       cardId,
+      entryId,
     }: {
       customerId: number
       supervisorId: number
       cardId?: number
+      entryId?: number
     }) => {
-      const response = await customersApi.assignSupervisor(customerId, supervisorId, cardId)
+      const response = await customersApi.assignSupervisor(customerId, supervisorId, cardId, entryId)
       if (!response.success) {
         throw new Error(response.error?.message || 'تخصیص سرپرست ناموفق بود')
       }
@@ -363,12 +378,14 @@ export function CustomerManagementView({
       customerId,
       agentId,
       cardId,
+      entryId,
     }: {
       customerId: number
       agentId: number
       cardId?: number
+      entryId?: number
     }) => {
-      const response = await customersApi.assignAgent(customerId, agentId, cardId)
+      const response = await customersApi.assignAgent(customerId, agentId, cardId, entryId)
       if (!response.success) {
         throw new Error(response.error?.message || 'تخصیص کارشناس ناموفق بود')
       }
@@ -386,10 +403,10 @@ export function CustomerManagementView({
   const initUpsellMutation = useMutation<
     { pay_link?: string; sms_result?: UpsellSmsResult | undefined },
     unknown,
-    { customerId: number; cardId: number; fieldKey: string }
+    { customerId: number; cardId: number; fieldKey: string; entryId?: number }
   >({
-    mutationFn: async ({ customerId, cardId, fieldKey }) => {
-      const response = await customersApi.initUpsell(customerId, cardId, fieldKey)
+    mutationFn: async ({ customerId, cardId, fieldKey, entryId }) => {
+      const response = await customersApi.initUpsell(customerId, cardId, fieldKey, entryId)
       if (!response.success) {
         throw new Error(response.error?.message || 'ایجاد فروش افزایشی ناموفق بود')
       }
@@ -448,6 +465,7 @@ export function CustomerManagementView({
     await updateStatusMutation.mutateAsync({
       customerId: customer.id,
       cardId: customer.card_id,
+      entryId: customer.entry_id ?? undefined,
       status,
     })
   }
@@ -476,19 +494,25 @@ export function CustomerManagementView({
         customerId: assignmentDialog.customer.id,
         supervisorId: selectedId,
         cardId: assignmentDialog.customer.card_id,
+        entryId: assignmentDialog.customer.entry_id ?? undefined,
       })
     } else {
       await assignAgentMutation.mutateAsync({
         customerId: assignmentDialog.customer.id,
         agentId: selectedId,
         cardId: assignmentDialog.customer.card_id,
+        entryId: assignmentDialog.customer.entry_id ?? undefined,
       })
     }
     setAssignmentDialog(null)
   }
 
   const handleSendNormalCode = async (customer: Customer) => {
-    await sendNormalCodeMutation.mutateAsync({ customerId: customer.id, cardId: customer.card_id })
+    await sendNormalCodeMutation.mutateAsync({
+      customerId: customer.id,
+      cardId: customer.card_id,
+      entryId: customer.entry_id ?? undefined,
+    })
   }
 
   const handleStartUpsell = async (customer: Customer, fieldKey: string) => {
@@ -501,12 +525,15 @@ export function CustomerManagementView({
       customerId: customer.id,
       cardId: customer.card_id,
       fieldKey,
+      entryId: customer.entry_id ?? undefined,
     })
   }
 
   const deriveMutationRowKey = (
     isPending: boolean,
-    variables: { customerId?: number | null; cardId?: number | null } | undefined
+    variables:
+      | { customerId?: number | null; cardId?: number | null; entryId?: number | null }
+      | undefined
   ) => {
     if (!isPending || !variables || variables.customerId == null) {
       return null
@@ -515,6 +542,13 @@ export function CustomerManagementView({
     const normalizedCustomerId = Number(variables.customerId)
     if (Number.isNaN(normalizedCustomerId)) {
       return null
+    }
+
+    if (variables.entryId != null) {
+      const normalizedEntryId = Number(variables.entryId)
+      if (!Number.isNaN(normalizedEntryId) && normalizedEntryId > 0) {
+        return `${normalizedCustomerId}-entry-${normalizedEntryId}`
+      }
     }
 
     if (variables.cardId == null) {

@@ -47,16 +47,30 @@ class Webhooks extends BaseController {
         $customer_id = (int) $order->get_meta('_ucb_customer_id');
         $token = (string) $order->get_meta('_ucb_payment_token');
         $card_id = (int) $order->get_meta('_ucb_card_id');
+        $submission_id = (int) $order->get_meta('_ucb_submission_id');
 
         if ($token) {
             $this->tokens->consume($token);
         }
 
         if ($customer_id > 0) {
-            $this->statuses->change_status($customer_id, 'upsell_paid', 0, [
+            $meta = [
                 'webhook' => true,
                 'order_id' => $order_id,
-            ], $card_id ?: null);
+            ];
+
+            if ($submission_id > 0) {
+                $meta['submission_id'] = $submission_id;
+            }
+
+            $this->statuses->change_status(
+                $customer_id,
+                'upsell_paid',
+                0,
+                $meta,
+                $card_id ?: null,
+                $submission_id > 0 ? $submission_id : null
+            );
         }
 
         return $this->success([

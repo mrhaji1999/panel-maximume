@@ -305,7 +305,7 @@ class Security {
     /**
      * Checks if user can manage customer.
      */
-    public static function can_manage_customer(int $customer_id, ?int $card_id = null): bool {
+    public static function can_manage_customer(int $customer_id, ?int $card_id = null, ?int $submission_id = null): bool {
         if (current_user_can('ucb_manage_all') || current_user_can('manage_options')) {
             return true;
         }
@@ -318,13 +318,47 @@ class Security {
 
         $role = Roles::get_user_role($user_id);
 
+        $target_card_id = $card_id;
+
+        if ($submission_id) {
+            $submission = get_post($submission_id);
+
+            if (!$submission || 'uc_submission' !== $submission->post_type) {
+                return false;
+            }
+
+            $owner_id = (int) get_post_meta($submission_id, '_uc_user_id', true);
+            if ($owner_id !== $customer_id) {
+                return false;
+            }
+
+            $submission_card_id = (int) get_post_meta($submission_id, '_uc_card_id', true);
+            if ($submission_card_id > 0) {
+                $target_card_id = $submission_card_id;
+            }
+
+            if ('supervisor' === $role) {
+                $assigned = (int) get_post_meta($submission_id, '_uc_supervisor_id', true);
+                if ($assigned === $user_id) {
+                    return true;
+                }
+            }
+
+            if ('agent' === $role) {
+                $assigned = (int) get_post_meta($submission_id, '_uc_agent_id', true);
+                if ($assigned === $user_id) {
+                    return true;
+                }
+            }
+        }
+
         $card_repository = new CustomerCardRepository();
         $card_repository->ensure_legacy_migrated($customer_id);
         $cards = $card_repository->get_cards($customer_id);
 
         if ('supervisor' === $role) {
-            if ($card_id && isset($cards[$card_id])) {
-                $assigned = (int) ($cards[$card_id]['supervisor_id'] ?? 0);
+            if ($target_card_id && isset($cards[$target_card_id])) {
+                $assigned = (int) ($cards[$target_card_id]['supervisor_id'] ?? 0);
                 return $assigned === $user_id;
             }
 
@@ -340,8 +374,8 @@ class Security {
         }
 
         if ('agent' === $role) {
-            if ($card_id && isset($cards[$card_id])) {
-                $assigned = (int) ($cards[$card_id]['agent_id'] ?? 0);
+            if ($target_card_id && isset($cards[$target_card_id])) {
+                $assigned = (int) ($cards[$target_card_id]['agent_id'] ?? 0);
                 return $assigned === $user_id;
             }
 
