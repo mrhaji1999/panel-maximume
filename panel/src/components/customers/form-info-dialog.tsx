@@ -12,6 +12,7 @@ import { formsApi } from '@/lib/api'
 import type { CustomerFormField, FormSubmission } from '@/types'
 import { formatDateTime, getErrorMessage } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import { useAuth } from '@/store/authStore'
 
 interface FormInfoDialogProps {
   customerId: number | null
@@ -21,6 +22,19 @@ interface FormInfoDialogProps {
   registeredAt?: string
 }
 
+const toOptionalNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) {
+    return undefined
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) {
+    return undefined
+  }
+
+  return parsed
+}
+
 export function FormInfoDialog({
   customerId,
   customerName,
@@ -28,12 +42,25 @@ export function FormInfoDialog({
   onOpenChange,
   registeredAt,
 }: FormInfoDialogProps) {
+  const { user } = useAuth()
+  const supervisorId = user?.role === 'supervisor' ? user.id : undefined
+  const agentId = user?.role === 'agent' ? user.id : undefined
+  const assignedCardIds = useMemo(
+    () => (user?.assigned_cards ? [...user.assigned_cards] : []),
+    [user?.assigned_cards]
+  )
+
   const query = useQuery<FormSubmission[]>({
-    queryKey: ['customer-form-info', customerId],
+    queryKey: ['customer-form-info', customerId, supervisorId ?? 'all', agentId ?? 'all'],
     enabled: open && Boolean(customerId),
     queryFn: async () => {
       if (!customerId) throw new Error('شناسه مشتری نامعتبر است')
-      const response = await formsApi.getForms({ customer_id: customerId, per_page: 100 })
+      const response = await formsApi.getForms({
+        customer_id: customerId,
+        per_page: 100,
+        supervisor_id: supervisorId,
+        agent_id: agentId,
+      })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در دریافت اطلاعات فرم')
       }
@@ -42,13 +69,38 @@ export function FormInfoDialog({
     staleTime: 1000 * 60,
   })
 
-  const forms = query.data ?? []
+  const forms = useMemo(() => {
+    const items = query.data ?? []
+    if (!user) {
+      return items
+    }
+
+    return items.filter((form) => {
+      const metaSupervisorId = toOptionalNumber(form.meta.supervisor_id)
+      const metaAgentId = toOptionalNumber(form.meta.agent_id)
+      const metaCardId = toOptionalNumber(form.meta.card_id) ?? 0
+
+      if (supervisorId) {
+        if (metaSupervisorId && metaSupervisorId !== supervisorId) {
+          return false
+        }
+        if (assignedCardIds.length && metaCardId > 0 && !assignedCardIds.includes(metaCardId)) {
+          return false
+        }
+      }
+      if (agentId) {
+        return metaAgentId === agentId
+      }
+      return true
+    })
+  }, [agentId, assignedCardIds, query.data, supervisorId, user])
 
   const preparedForms = useMemo(
     () =>
       forms.map((form) => {
         const fields: CustomerFormField[] = []
         const { meta } = form
+        const normalizedCardId = toOptionalNumber(meta.card_id) ?? 0
 
         const pushField = (label: string, value: unknown) => {
           const normalizedLabel = (label || '').trim()
@@ -88,7 +140,7 @@ export function FormInfoDialog({
           id: form.id,
           title: form.title,
           createdAt: form.created_at,
-          cardId: meta.card_id,
+          cardId: normalizedCardId,
           fields: uniqueFields,
         }
       }),

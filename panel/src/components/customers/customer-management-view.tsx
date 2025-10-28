@@ -61,6 +61,28 @@ const STATUS_LABELS: Record<CustomerStatus, string> = {
   canceled: 'انصراف داد',
 }
 
+const normalizeCustomerRecord = (customer: Customer): Customer => {
+  const entryId =
+    typeof customer.entry_id === 'string' ? Number(customer.entry_id) : customer.entry_id
+
+  const normalizedEntryId =
+    typeof entryId === 'number' && !Number.isNaN(entryId) && entryId > 0 ? entryId : null
+
+  const normalizedStatus =
+    typeof customer.status === 'string' && customer.status.trim() !== ''
+      ? (customer.status as CustomerStatus)
+      : 'unassigned'
+
+  return {
+    ...customer,
+    status: normalizedStatus,
+    assigned_supervisor: Number(customer.assigned_supervisor) || 0,
+    assigned_agent: Number(customer.assigned_agent) || 0,
+    card_id: Number(customer.card_id) || 0,
+    entry_id: normalizedEntryId,
+  }
+}
+
 const deriveCustomerRowKey = (customer: Customer): string => {
   if (customer.entry_id != null && customer.entry_id > 0) {
     return `${customer.id}-${customer.entry_id}`
@@ -235,16 +257,23 @@ export function CustomerManagementView({
     enabled: showStatusTabs,
   })
 
-  const customers = customersQuery.data?.items ?? []
+  const rawCustomers = customersQuery.data?.items ?? []
+  const customers = useMemo(() => rawCustomers.map((item) => normalizeCustomerRecord(item)), [rawCustomers])
   const pagination = customersQuery.data?.pagination
   const totalPages = pagination?.total_pages ?? 1
   const totalCustomers = pagination?.total ?? 0
 
   const statusTabs: StatusTab[] = useMemo(() => {
     const tabData = tabsQuery.data?.tabs ?? {}
+    const unassignedTab =
+      tabData['unassigned'] ??
+      tabData[''] ??
+      tabData['null'] ??
+      tabData['undefined'] ??
+      tabData['none']
     return [
       { key: 'all', label: 'همه', count: totalCustomers },
-      { key: 'unassigned', label: 'تعیین نشده', count: tabData['unassigned']?.total },
+      { key: 'unassigned', label: 'تعیین نشده', count: unassignedTab?.total },
       { key: 'upsell_pending', label: 'در انتظار پرداخت', count: tabData['upsell_pending']?.total },
       { key: 'upsell_paid', label: 'پرداخت شده', count: tabData['upsell_paid']?.total },
       { key: 'upsell', label: 'فروش افزایشی' },
