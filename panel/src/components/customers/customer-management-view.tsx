@@ -271,20 +271,10 @@ export function CustomerManagementView({
   const updateStatusMutation = useMutation<
     unknown,
     unknown,
-    { customerId: number; cardId?: number; status: CustomerStatus; reason?: string; meta?: Record<string, unknown> }
+    { submissionId: number; status: CustomerStatus }
   >({
-    mutationFn: async ({
-      customerId,
-      cardId,
-      status,
-      reason,
-      meta,
-    }) => {
-      const response = await customersApi.updateCustomerStatus(customerId, status, {
-        reason,
-        meta,
-        cardId,
-      })
+    mutationFn: async ({ submissionId, status }) => {
+      const response = await formsApi.updateSubmissionStatus(submissionId, status)
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در تغییر وضعیت')
       }
@@ -386,10 +376,10 @@ export function CustomerManagementView({
   const initUpsellMutation = useMutation<
     { pay_link?: string; sms_result?: UpsellSmsResult | undefined },
     unknown,
-    { customerId: number; cardId: number; fieldKey: string }
+    { submissionId: number; fieldKey: string }
   >({
-    mutationFn: async ({ customerId, cardId, fieldKey }) => {
-      const response = await customersApi.initUpsell(customerId, cardId, fieldKey)
+    mutationFn: async ({ submissionId, fieldKey }) => {
+      const response = await customersApi.initUpsell(submissionId, fieldKey)
       if (!response.success) {
         throw new Error(response.error?.message || 'ایجاد فروش افزایشی ناموفق بود')
       }
@@ -440,14 +430,13 @@ export function CustomerManagementView({
     customer.display_name || customer.email || `مشتری #${customer.id}`
 
   const handleStatusChange = async (customer: Customer, status: CustomerStatus) => {
-    if (status === 'upsell' && !customer.card_id) {
-      notifyError('کارت نامشخص', 'برای این مشتری کارت تعریف نشده است')
-      throw new Error('missing_card')
+    if (!customer.entry_id) {
+      notifyError('فرم نامشخص', 'شناسه فرم برای این مشتری یافت نشد')
+      throw new Error('missing_entry_id')
     }
 
     await updateStatusMutation.mutateAsync({
-      customerId: customer.id,
-      cardId: customer.card_id,
+      submissionId: customer.entry_id,
       status,
     })
   }
@@ -492,39 +481,25 @@ export function CustomerManagementView({
   }
 
   const handleStartUpsell = async (customer: Customer, fieldKey: string) => {
-    if (!customer.card_id) {
-      notifyError('کار نامشخص', 'برای این مشتری کارت تعریف نشده است')
-      throw new Error('missing_card')
+    if (!customer.entry_id) {
+      notifyError('فرم نامشخص', 'شناسه فرم برای این مشتری یافت نشد')
+      throw new Error('missing_entry_id')
     }
 
     await initUpsellMutation.mutateAsync({
-      customerId: customer.id,
-      cardId: customer.card_id,
+      submissionId: customer.entry_id,
       fieldKey,
     })
   }
 
   const deriveMutationRowKey = (
     isPending: boolean,
-    variables: { customerId?: number | null; cardId?: number | null } | undefined
+    variables: { submissionId?: number | null } | undefined
   ) => {
-    if (!isPending || !variables || variables.customerId == null) {
+    if (!isPending || !variables || !variables.submissionId) {
       return null
     }
-
-    const normalizedCustomerId = Number(variables.customerId)
-    if (Number.isNaN(normalizedCustomerId)) {
-      return null
-    }
-
-    if (variables.cardId == null) {
-      return `${normalizedCustomerId}-none`
-    }
-
-    const normalizedCardId = Number(variables.cardId)
-    return Number.isNaN(normalizedCardId)
-      ? `${normalizedCustomerId}-none`
-      : `${normalizedCustomerId}-${normalizedCardId}`
+    return `${variables.submissionId}`
   }
 
   const selectedStatusUpdatingKey = deriveMutationRowKey(
