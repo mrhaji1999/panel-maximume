@@ -247,18 +247,6 @@ export const customersApi = {
       params: cardId ? { card_id: cardId } : undefined,
     }),
 
-  updateCustomerStatus: (
-    id: number,
-    status: string,
-    options?: { reason?: string; meta?: Record<string, unknown>; cardId?: number }
-  ) =>
-    apiClient.patch(`/customers/${id}/status`, {
-      status,
-      ...(options?.reason ? { reason: options.reason } : {}),
-      ...(options?.meta ? { meta: options.meta } : {}),
-      ...(options?.cardId ? { card_id: options.cardId } : {}),
-    }),
-
   addCustomerNote: (id: number, note: string) =>
     apiClient.post(`/customers/${id}/notes`, { note }),
 
@@ -279,8 +267,8 @@ export const customersApi = {
       ...(cardId ? { card_id: cardId } : {}),
     }),
   
-  initUpsell: (id: number, cardId: number, fieldKey: string) =>
-    apiClient.post(`/customers/${id}/upsell/init`, { card_id: cardId, field_key: fieldKey }),
+  initUpsell: (submissionId: number, fieldKey: string) =>
+    apiClient.post(`/submissions/${submissionId}/upsell/init`, { field_key: fieldKey }),
 
   getAssignableCustomers: () =>
     apiClient.get<CustomerListResponse>('/customers/assignable'),
@@ -314,6 +302,9 @@ export const formsApi = {
 
   getForm: (id: number) =>
     apiClient.get(`/forms/${id}`),
+
+  updateSubmissionStatus: (submissionId: number, status: string) =>
+    apiClient.patch(`/submissions/${submissionId}/status`, { status }),
 }
 
 // Schedule API
