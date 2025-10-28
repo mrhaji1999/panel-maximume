@@ -37,93 +37,134 @@ class CustomerService {
      * @return array{items: array<int, array<string, mixed>>, total: int}
      */
     public function list_customers(array $filters, int $page = 1, int $per_page = 20): array {
-        $args = [
-            'post_type'      => 'uc_submission',
-            'post_status'    => 'publish',
-            'posts_per_page' => $per_page,
-            'paged'          => $page,
-            'orderby'        => 'date',
-            'order'          => 'DESC',
-            'meta_query'     => [],
-        ];
+        // Build meta query for submissions to find relevant users
+        $submission_meta_query = ['relation' => 'AND'];
+        $has_submission_filters = false;
 
-        if (!empty($filters['order'])) {
-            $order = strtoupper(sanitize_text_field((string) $filters['order']));
-            if (in_array($order, ['ASC', 'DESC'], true)) {
-                $args['order'] = $order;
-            }
-        }
-
-        if (!empty($filters['status'])) {
-            $args['meta_query'][] = [
-                'key' => '_uc_status',
-                'value' => sanitize_key($filters['status']),
-                'compare' => '=',
-            ];
-        }
-
-        if (!empty($filters['card_id'])) {
-            $args['meta_query'][] = [
-                'key' => '_uc_card_id',
-                'value' => (int) $filters['card_id'],
-                'compare' => '=',
-            ];
-        }
-
-        if (!empty($filters['card_id_in'])) {
-            $args['meta_query'][] = [
-                'key' => '_uc_card_id',
-                'value' => $filters['card_id_in'],
-                'compare' => 'IN',
-            ];
-        }
-
+        $supervisor_or_query = ['relation' => 'OR'];
         if (!empty($filters['supervisor_id'])) {
-            $args['meta_query'][] = [
+            $supervisor_or_query[] = [
                 'key' => '_uc_supervisor_id',
                 'value' => (int) $filters['supervisor_id'],
                 'compare' => '=',
             ];
         }
-
-        if (!empty($filters['agent_id'])) {
-            $args['meta_query'][] = [
-                'key' => '_uc_agent_id',
-                'value' => (int) $filters['agent_id'],
-                'compare' => '=',
+        if (!empty($filters['card_id_in'])) {
+            $supervisor_or_query[] = [
+                'key' => '_uc_card_id',
+                'value' => (array) $filters['card_id_in'],
+                'compare' => 'IN',
             ];
         }
 
-        if (!empty($filters['search'])) {
-            $search = sanitize_text_field($filters['search']);
-            $user_ids = get_users([
-                'search' => '*' . $search . '*',
-                'search_columns' => ['user_login', 'user_email', 'display_name'],
-                'fields' => 'ID',
-            ]);
+        // Only add the OR query if it has clauses
+        if (count($supervisor_or_query) > 1) {
+            $submission_meta_query[] = $supervisor_or_query;
+            $has_submission_filters = true;
+        }
 
-            if (!empty($user_ids)) {
-                $args['meta_query'][] = [
-                    'key' => '_uc_user_id',
-                    'value' => $user_ids,
-                    'compare' => 'IN',
-                ];
-            } else {
-                 return ['items' => [], 'total' => 0];
+        // Add other filters as AND
+        if (!empty($filters['status'])) {
+            $submission_meta_query[] = ['key' => '_uc_status', 'value' => sanitize_key($filters['status'])];
+            $has_submission_filters = true;
+        }
+        if (!empty($filters['card_id'])) {
+            $submission_meta_query[] = ['key' => '_uc_card_id', 'value' => (int) $filters['card_id']];
+            $has_submission_filters = true;
+        }
+        if (!empty($filters['agent_id'])) {
+            $submission_meta_query[] = ['key' => '_uc_agent_id', 'value' => (int) $filters['agent_id']];
+            $has_submission_filters = true;
+        }
+        if (!empty($filters['registered_date'])) {
+            // This filter applies to submission date, not user registration date
+            $has_submission_filters = true;
+        }
+
+        $customer_ids_from_forms = [];
+        if ($has_submission_filters) {
+            $submission_args = [
+                'post_type'      => 'uc_submission',
+                'post_status'    => 'publish',
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+                'meta_query'     => $submission_meta_query,
+            ];
+
+            if (!empty($filters['registered_date'])) {
+                $date = sanitize_text_field((string) $filters['registered_date']);
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                     $submission_args['date_query'] = [
+                        ['year' => substr($date, 0, 4), 'month' => substr($date, 5, 2), 'day' => substr($date, 8, 2)]
+                    ];
+                }
+            }
+
+            $submission_query = new \WP_Query($submission_args);
+            $submission_ids = $submission_query->posts;
+
+            if (empty($submission_ids)) {
+                return ['items' => [], 'total' => 0]; // No submissions match, so no customers
+            }
+
+            global $wpdb;
+            $user_id_results = $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT DISTINCT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_uc_user_id' AND post_id IN (" . implode(',', array_fill(0, count($submission_ids), '%d')) . ")",
+                    $submission_ids
+                )
+            );
+            $customer_ids_from_forms = array_map('intval', $user_id_results);
+        }
+
+        // Now, build the final user query
+        $user_query_args = [
+            'number' => $per_page,
+            'paged' => $page,
+            'orderby' => 'registered',
+            'order' => 'DESC',
+            'role__in' => ['ucb_customer', 'customer'],
+        ];
+
+        if (!empty($filters['order'])) {
+            $order = strtoupper(sanitize_text_field((string) $filters['order']));
+            if (in_array($order, ['ASC', 'DESC'], true)) {
+                $user_query_args['order'] = $order;
             }
         }
 
-        $query = new \WP_Query($args);
+        // Handle search filter
+        if (!empty($filters['search'])) {
+            $search = sanitize_text_field($filters['search']);
+            $user_query_args['search'] = '*' . $search . '*';
+            $user_query_args['search_columns'] = ['user_login', 'user_email', 'display_name'];
+        }
+
+        // If we have filters that produced a list of user IDs, we MUST include them.
+        if ($has_submission_filters) {
+            if (empty($customer_ids_from_forms)) {
+                return ['items' => [], 'total' => 0]; // Filters were applied but no users found
+            }
+            // The search will be applied to this subset of users
+            $user_query_args['include'] = $customer_ids_from_forms;
+        }
+
+        $user_query = new WP_User_Query($user_query_args);
+        $users = $user_query->get_results();
+        $total_users = $user_query->get_total();
+
         $items = [];
-        foreach ($query->posts as $submission) {
-            if ($submission instanceof WP_Post) {
-                $items[] = $this->format_customer_from_submission($submission);
+        foreach ($users as $user) {
+            if ($user instanceof WP_User) {
+                // We need to pass the correct card_id to format_customer if available
+                $card_id_context = !empty($filters['card_id']) ? (int) $filters['card_id'] : null;
+                $items[] = $this->format_customer($user, $card_id_context);
             }
         }
 
         return [
             'items' => $items,
-            'total' => $query->found_posts,
+            'total' => $total_users,
         ];
     }
 
