@@ -12,6 +12,7 @@ import { formsApi } from '@/lib/api'
 import type { CustomerFormField, FormSubmission } from '@/types'
 import { formatDateTime, getErrorMessage } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import { useAuth } from '@/store/authStore'
 
 interface FormInfoDialogProps {
   customerId: number | null
@@ -28,12 +29,25 @@ export function FormInfoDialog({
   onOpenChange,
   registeredAt,
 }: FormInfoDialogProps) {
+  const { user } = useAuth()
+  const supervisorId = user?.role === 'supervisor' ? user.id : undefined
+  const agentId = user?.role === 'agent' ? user.id : undefined
+  const assignedCardIds = useMemo(
+    () => (user?.assigned_cards ? [...user.assigned_cards] : []),
+    [user?.assigned_cards]
+  )
+
   const query = useQuery<FormSubmission[]>({
-    queryKey: ['customer-form-info', customerId],
+    queryKey: ['customer-form-info', customerId, supervisorId ?? 'all', agentId ?? 'all'],
     enabled: open && Boolean(customerId),
     queryFn: async () => {
       if (!customerId) throw new Error('شناسه مشتری نامعتبر است')
-      const response = await formsApi.getForms({ customer_id: customerId, per_page: 100 })
+      const response = await formsApi.getForms({
+        customer_id: customerId,
+        per_page: 100,
+        supervisor_id: supervisorId,
+        agent_id: agentId,
+      })
       if (!response.success) {
         throw new Error(response.error?.message || 'خطا در دریافت اطلاعات فرم')
       }
@@ -42,7 +56,27 @@ export function FormInfoDialog({
     staleTime: 1000 * 60,
   })
 
-  const forms = query.data ?? []
+  const forms = useMemo(() => {
+    const items = query.data ?? []
+    if (!user) {
+      return items
+    }
+
+    return items.filter((form) => {
+      if (supervisorId) {
+        if (form.meta.supervisor_id && form.meta.supervisor_id !== supervisorId) {
+          return false
+        }
+        if (assignedCardIds.length && !assignedCardIds.includes(form.meta.card_id)) {
+          return false
+        }
+      }
+      if (agentId) {
+        return form.meta.agent_id === agentId
+      }
+      return true
+    })
+  }, [agentId, assignedCardIds, query.data, supervisorId, user])
 
   const preparedForms = useMemo(
     () =>

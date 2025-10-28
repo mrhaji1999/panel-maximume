@@ -9,15 +9,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useNotification } from '@/store/uiStore';
 import { getErrorMessage } from '@/lib/utils';
 import type { Customer, Agent } from '@/types';
+import { useAuth } from '@/store/authStore';
 
 export function AssignCustomersPage() {
   const [selectedCustomers, setSelectedCustomers] = useState<number[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const queryClient = useQueryClient();
   const { success: notifySuccess, error: notifyError } = useNotification();
+  const { user } = useAuth();
+
+  const supervisorId = user?.role === 'supervisor' ? user.id : undefined;
+  const assignedCardIds = useMemo(
+    () => (user?.assigned_cards ? [...user.assigned_cards] : []),
+    [user?.assigned_cards]
+  );
 
   const { data: customers = [], isLoading: isLoadingCustomers } = useQuery<Customer[]>({
-    queryKey: ['assignable-customers'],
+    queryKey: ['assignable-customers', supervisorId ?? 'all'],
     queryFn: async () => {
       const response = await customersApi.getAssignableCustomers();
       if (!response.success) {
@@ -27,10 +35,35 @@ export function AssignCustomersPage() {
     },
   });
 
-  const assignableSubmissions = useMemo(
-    () => customers.filter((customer): customer is Customer & { entry_id: number } => typeof customer.entry_id === 'number'),
-    [customers]
-  );
+  const assignableSubmissions = useMemo(() => {
+    return customers
+      .filter((customer): customer is Customer & { entry_id: number } => typeof customer.entry_id === 'number')
+      .filter((customer) => {
+        const hasAgent = Boolean(customer.assigned_agent && customer.assigned_agent > 0);
+        if (hasAgent) {
+          return false;
+        }
+
+        if (supervisorId) {
+          if (
+            customer.assigned_supervisor &&
+            customer.assigned_supervisor !== supervisorId
+          ) {
+            return false;
+          }
+
+          if (
+            assignedCardIds.length &&
+            customer.card_id &&
+            !assignedCardIds.includes(customer.card_id)
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+  }, [assignedCardIds, customers, supervisorId]);
 
   const { data: agents = [], isLoading: isLoadingAgents } = useQuery<Agent[]>({
     queryKey: ['agents-for-assignment'],
