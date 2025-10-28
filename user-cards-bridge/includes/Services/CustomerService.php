@@ -44,7 +44,7 @@ class CustomerService {
             'paged'          => $page,
             'orderby'        => 'date',
             'order'          => 'DESC',
-            'meta_query'     => [],
+            'meta_query'     => ['relation' => 'AND'],
         ];
 
         if (!empty($filters['order'])) {
@@ -54,7 +54,7 @@ class CustomerService {
             }
         }
 
-        if (!empty($filters['status'])) {
+        if (isset($filters['status']) && '' !== $filters['status']) {
             $args['meta_query'][] = [
                 'key' => '_uc_status',
                 'value' => sanitize_key($filters['status']),
@@ -86,12 +86,35 @@ class CustomerService {
             ];
         }
 
-        if (!empty($filters['agent_id'])) {
-            $args['meta_query'][] = [
-                'key' => '_uc_agent_id',
-                'value' => (int) $filters['agent_id'],
-                'compare' => '=',
-            ];
+        if (array_key_exists('agent_id', $filters)) {
+            $agent_id = (int) $filters['agent_id'];
+
+            if ($agent_id > 0) {
+                $args['meta_query'][] = [
+                    'key' => '_uc_agent_id',
+                    'value' => $agent_id,
+                    'compare' => '=',
+                ];
+            } else {
+                $args['meta_query'][] = [
+                    'relation' => 'OR',
+                    [
+                        'key' => '_uc_agent_id',
+                        'compare' => 'NOT EXISTS',
+                    ],
+                    [
+                        'key' => '_uc_agent_id',
+                        'value' => '',
+                        'compare' => '=',
+                    ],
+                    [
+                        'key' => '_uc_agent_id',
+                        'value' => 0,
+                        'type' => 'NUMERIC',
+                        'compare' => '=',
+                    ],
+                ];
+            }
         }
 
         if (!empty($filters['search'])) {
@@ -111,6 +134,10 @@ class CustomerService {
             } else {
                  return ['items' => [], 'total' => 0];
             }
+        }
+
+        if (1 === count($args['meta_query'])) {
+            unset($args['meta_query']);
         }
 
         $query = new \WP_Query($args);
@@ -161,6 +188,25 @@ class CustomerService {
         $form_data = $this->get_latest_submission_data($user_id, $card_id, $submission_id);
 
         $upsell = $this->card_repository->get_card_upsell($user_id, $card_id);
+        $submission_upsell = array_filter([
+            'field_key'   => get_post_meta($submission_id, '_uc_upsell_field_key', true),
+            'field_label' => get_post_meta($submission_id, '_uc_upsell_field_label', true),
+            'amount'      => get_post_meta($submission_id, '_uc_upsell_amount', true),
+            'order_id'    => get_post_meta($submission_id, '_uc_upsell_order_id', true) ?: get_post_meta($submission_id, '_uc_upsell_last_order_id', true),
+            'pay_link'    => get_post_meta($submission_id, '_uc_upsell_pay_link', true),
+        ], static function ($value) {
+            return null !== $value && $value !== '';
+        });
+
+        if (!empty($submission_upsell)) {
+            if (isset($submission_upsell['amount'])) {
+                $submission_upsell['amount'] = (float) $submission_upsell['amount'];
+            }
+            if (isset($submission_upsell['order_id'])) {
+                $submission_upsell['order_id'] = (int) $submission_upsell['order_id'];
+            }
+            $upsell = array_merge($upsell, $submission_upsell);
+        }
 
         $phone_meta = get_user_meta($user_id, 'ucb_customer_phone', true);
         if ('' === $phone_meta) {
@@ -818,20 +864,32 @@ class CustomerService {
     /**
      * Assign supervisor to customer.
      */
-    public function assign_supervisor(int $customer_id, int $supervisor_id, ?int $card_id = null): void {
+    public function assign_supervisor(int $customer_id, int $supervisor_id, ?int $card_id = null, ?int $submission_id = null): void {
         update_user_meta($customer_id, 'ucb_customer_assigned_supervisor', $supervisor_id);
+
+        if (null !== $submission_id && $submission_id > 0) {
+            update_post_meta($submission_id, '_uc_supervisor_id', $supervisor_id);
+
+            if (null !== $card_id && $card_id > 0) {
+                $this->card_repository->update_supervisor($customer_id, $card_id, $supervisor_id);
+                $this->card_repository->update_submission($customer_id, $card_id, $submission_id);
+            }
+
+            $this->update_reservations_supervisor($customer_id, $supervisor_id, $card_id, $submission_id);
+            return;
+        }
 
         if (null !== $card_id && $card_id > 0) {
             $this->card_repository->update_supervisor($customer_id, $card_id, $supervisor_id);
             $this->update_forms_meta($customer_id, '_uc_supervisor_id', $supervisor_id, $card_id);
-            $this->update_reservations_supervisor($customer_id, $supervisor_id, $card_id);
+            $this->update_reservations_supervisor($customer_id, $supervisor_id, $card_id, null);
         } else {
             $cards = $this->get_customer_cards_map($customer_id);
             foreach (array_keys($cards) as $existing_card_id) {
                 $this->card_repository->update_supervisor($customer_id, (int) $existing_card_id, $supervisor_id);
             }
             $this->update_forms_meta($customer_id, '_uc_supervisor_id', $supervisor_id, null);
-            $this->update_reservations_supervisor($customer_id, $supervisor_id, null);
+            $this->update_reservations_supervisor($customer_id, $supervisor_id, null, null);
         }
     }
 
@@ -843,6 +901,10 @@ class CustomerService {
 
         if (null !== $submission_id && $submission_id > 0) {
              update_post_meta($submission_id, '_uc_agent_id', $agent_id);
+            if (null !== $card_id && $card_id > 0) {
+                $this->card_repository->update_agent($customer_id, $card_id, $agent_id);
+                $this->card_repository->update_submission($customer_id, $card_id, $submission_id);
+            }
         } elseif (null !== $card_id && $card_id > 0) {
             $this->card_repository->update_agent($customer_id, $card_id, $agent_id);
             $this->update_forms_meta($customer_id, '_uc_agent_id', $agent_id, $card_id);
@@ -947,7 +1009,7 @@ class CustomerService {
     /**
      * Update supervisor in reservations table.
      */
-    protected function update_reservations_supervisor(int $customer_id, int $supervisor_id, ?int $card_id = null): void {
+    protected function update_reservations_supervisor(int $customer_id, int $supervisor_id, ?int $card_id = null, ?int $submission_id = null): void {
         global $wpdb;
 
         $table = $wpdb->prefix . 'ucb_reservations';

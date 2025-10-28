@@ -27,6 +27,11 @@ export function AssignCustomersPage() {
     },
   });
 
+  const assignableSubmissions = useMemo(
+    () => customers.filter((customer): customer is Customer & { entry_id: number } => typeof customer.entry_id === 'number'),
+    [customers]
+  );
+
   const { data: agents = [], isLoading: isLoadingAgents } = useQuery<Agent[]>({
     queryKey: ['agents-for-assignment'],
     queryFn: async () => {
@@ -66,15 +71,15 @@ export function AssignCustomersPage() {
 
   const toggleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedCustomers(customers.map((c) => c.entry_id!));
+      setSelectedCustomers(assignableSubmissions.map((c) => c.entry_id));
     } else {
       setSelectedCustomers([]);
     }
   };
 
   const isAllSelected = useMemo(() => {
-    return customers.length > 0 && selectedCustomers.length === customers.length;
-  }, [selectedCustomers, customers]);
+    return assignableSubmissions.length > 0 && selectedCustomers.length === assignableSubmissions.length;
+  }, [selectedCustomers, assignableSubmissions]);
 
   return (
     <div className="space-y-6">
@@ -126,16 +131,20 @@ export function AssignCustomersPage() {
                 <TableRow>
                   <TableCell colSpan={4} className="text-center">در حال بارگذاری...</TableCell>
                 </TableRow>
+              ) : assignableSubmissions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center">مشتری بدون کارشناس برای تخصیص وجود ندارد.</TableCell>
+                </TableRow>
               ) : (
-                customers.map((customer) => (
+                assignableSubmissions.map((customer) => (
                   <TableRow key={customer.entry_id}>
                     <TableCell>
                       <Checkbox
-                        checked={selectedCustomers.includes(customer.entry_id!)}
+                        checked={selectedCustomers.includes(customer.entry_id)}
                         onCheckedChange={(checked) => {
                           setSelectedCustomers(
                             checked
-                              ? [...selectedCustomers, customer.entry_id!]
+                              ? [...new Set([...selectedCustomers, customer.entry_id])]
                               : selectedCustomers.filter((id) => id !== customer.entry_id)
                           );
                         }}
