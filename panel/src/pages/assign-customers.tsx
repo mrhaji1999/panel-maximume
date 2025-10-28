@@ -43,12 +43,24 @@ export function AssignCustomersPage() {
         if (hasAgent) {
           return false;
         }
-        if (supervisorId && customer.assigned_supervisor !== supervisorId) {
-          return false;
+
+        if (supervisorId) {
+          if (
+            customer.assigned_supervisor &&
+            customer.assigned_supervisor !== supervisorId
+          ) {
+            return false;
+          }
+
+          if (
+            assignedCardIds.length &&
+            customer.card_id &&
+            !assignedCardIds.includes(customer.card_id)
+          ) {
+            return false;
+          }
         }
-        if (supervisorId && assignedCardIds.length && customer.card_id && !assignedCardIds.includes(customer.card_id)) {
-          return false;
-        }
+
         return true;
       });
   }, [assignedCardIds, customers, supervisorId]);
