@@ -22,6 +22,19 @@ interface FormInfoDialogProps {
   registeredAt?: string
 }
 
+const toOptionalNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) {
+    return undefined
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) {
+    return undefined
+  }
+
+  return parsed
+}
+
 export function FormInfoDialog({
   customerId,
   customerName,
@@ -63,16 +76,20 @@ export function FormInfoDialog({
     }
 
     return items.filter((form) => {
+      const metaSupervisorId = toOptionalNumber(form.meta.supervisor_id)
+      const metaAgentId = toOptionalNumber(form.meta.agent_id)
+      const metaCardId = toOptionalNumber(form.meta.card_id) ?? 0
+
       if (supervisorId) {
-        if (form.meta.supervisor_id && form.meta.supervisor_id !== supervisorId) {
+        if (metaSupervisorId && metaSupervisorId !== supervisorId) {
           return false
         }
-        if (assignedCardIds.length && !assignedCardIds.includes(form.meta.card_id)) {
+        if (assignedCardIds.length && metaCardId > 0 && !assignedCardIds.includes(metaCardId)) {
           return false
         }
       }
       if (agentId) {
-        return form.meta.agent_id === agentId
+        return metaAgentId === agentId
       }
       return true
     })
@@ -83,6 +100,7 @@ export function FormInfoDialog({
       forms.map((form) => {
         const fields: CustomerFormField[] = []
         const { meta } = form
+        const normalizedCardId = toOptionalNumber(meta.card_id) ?? 0
 
         const pushField = (label: string, value: unknown) => {
           const normalizedLabel = (label || '').trim()
@@ -122,7 +140,7 @@ export function FormInfoDialog({
           id: form.id,
           title: form.title,
           createdAt: form.created_at,
-          cardId: meta.card_id,
+          cardId: normalizedCardId,
           fields: uniqueFields,
         }
       }),

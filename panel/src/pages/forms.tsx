@@ -34,6 +34,19 @@ type FilterState = {
   page: number
 }
 
+const toOptionalNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) {
+    return undefined
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) {
+    return undefined
+  }
+
+  return parsed
+}
+
 export function FormsPage() {
   const { user } = useAuth()
   const [filters, setFilters] = useState<FilterState>({ search: '', page: 1 })
@@ -132,17 +145,23 @@ export function FormsPage() {
   const forms = formsQuery.data?.items ?? []
   const accessibleForms = useMemo(() => {
     return forms.filter((form: FormSubmission) => {
+      const metaSupervisorId = toOptionalNumber(form.meta.supervisor_id)
+      const metaAgentId = toOptionalNumber(form.meta.agent_id)
+      const metaCardId = toOptionalNumber(form.meta.card_id) ?? 0
+
       if (supervisorId) {
-        if (form.meta.supervisor_id && form.meta.supervisor_id !== supervisorId) {
+        if (metaSupervisorId && metaSupervisorId !== supervisorId) {
           return false
         }
-        if (assignedCardIds.length && !assignedCardIds.includes(form.meta.card_id)) {
+        if (assignedCardIds.length && metaCardId > 0 && !assignedCardIds.includes(metaCardId)) {
           return false
         }
       }
+
       if (agentId) {
-        return form.meta.agent_id === agentId
+        return metaAgentId === agentId
       }
+
       return true
     })
   }, [agentId, assignedCardIds, forms, supervisorId])

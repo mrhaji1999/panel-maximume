@@ -37,26 +37,34 @@ export function AssignCustomersPage() {
 
   const assignableSubmissions = useMemo(() => {
     return customers
-      .filter((customer): customer is Customer & { entry_id: number } => typeof customer.entry_id === 'number')
+      .map((customer) => {
+        const entryId = typeof customer.entry_id === 'string' ? Number(customer.entry_id) : customer.entry_id;
+        const assignedAgentId = Number(customer.assigned_agent) || 0;
+        const assignedSupervisorId = Number(customer.assigned_supervisor) || 0;
+        const cardId = Number(customer.card_id) || 0;
+
+        return {
+          ...customer,
+          entry_id: typeof entryId === 'number' && !Number.isNaN(entryId) ? entryId : null,
+          assigned_agent: assignedAgentId,
+          assigned_supervisor: assignedSupervisorId,
+          card_id: cardId,
+        };
+      })
+      .filter((customer): customer is Customer & { entry_id: number } =>
+        typeof customer.entry_id === 'number' && customer.entry_id > 0
+      )
       .filter((customer) => {
-        const hasAgent = Boolean(customer.assigned_agent && customer.assigned_agent > 0);
-        if (hasAgent) {
+        if (customer.assigned_agent > 0) {
           return false;
         }
 
         if (supervisorId) {
-          if (
-            customer.assigned_supervisor &&
-            customer.assigned_supervisor !== supervisorId
-          ) {
+          if (customer.assigned_supervisor > 0 && customer.assigned_supervisor !== supervisorId) {
             return false;
           }
 
-          if (
-            assignedCardIds.length &&
-            customer.card_id &&
-            !assignedCardIds.includes(customer.card_id)
-          ) {
+          if (assignedCardIds.length && customer.card_id > 0 && !assignedCardIds.includes(customer.card_id)) {
             return false;
           }
         }
@@ -102,8 +110,8 @@ export function AssignCustomersPage() {
     assignAgentMutation.mutate({ submission_ids: selectedCustomers, agent_id: parseInt(selectedAgent) });
   };
 
-  const toggleSelectAll = (checked: boolean) => {
-    if (checked) {
+  const toggleSelectAll = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
       setSelectedCustomers(assignableSubmissions.map((c) => c.entry_id));
     } else {
       setSelectedCustomers([]);
