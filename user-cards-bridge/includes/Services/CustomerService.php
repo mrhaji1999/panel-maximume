@@ -44,7 +44,7 @@ class CustomerService {
             'paged'          => $page,
             'orderby'        => 'date',
             'order'          => 'DESC',
-            'meta_query'     => [],
+            'meta_query'     => ['relation' => 'AND'],
         ];
 
         if (!empty($filters['order'])) {
@@ -54,7 +54,7 @@ class CustomerService {
             }
         }
 
-        if (!empty($filters['status'])) {
+        if (isset($filters['status']) && '' !== $filters['status']) {
             $args['meta_query'][] = [
                 'key' => '_uc_status',
                 'value' => sanitize_key($filters['status']),
@@ -86,12 +86,35 @@ class CustomerService {
             ];
         }
 
-        if (!empty($filters['agent_id'])) {
-            $args['meta_query'][] = [
-                'key' => '_uc_agent_id',
-                'value' => (int) $filters['agent_id'],
-                'compare' => '=',
-            ];
+        if (array_key_exists('agent_id', $filters)) {
+            $agent_id = (int) $filters['agent_id'];
+
+            if ($agent_id > 0) {
+                $args['meta_query'][] = [
+                    'key' => '_uc_agent_id',
+                    'value' => $agent_id,
+                    'compare' => '=',
+                ];
+            } else {
+                $args['meta_query'][] = [
+                    'relation' => 'OR',
+                    [
+                        'key' => '_uc_agent_id',
+                        'compare' => 'NOT EXISTS',
+                    ],
+                    [
+                        'key' => '_uc_agent_id',
+                        'value' => '',
+                        'compare' => '=',
+                    ],
+                    [
+                        'key' => '_uc_agent_id',
+                        'value' => 0,
+                        'type' => 'NUMERIC',
+                        'compare' => '=',
+                    ],
+                ];
+            }
         }
 
         if (!empty($filters['search'])) {
@@ -111,6 +134,10 @@ class CustomerService {
             } else {
                  return ['items' => [], 'total' => 0];
             }
+        }
+
+        if (1 === count($args['meta_query'])) {
+            unset($args['meta_query']);
         }
 
         $query = new \WP_Query($args);

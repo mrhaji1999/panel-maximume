@@ -134,8 +134,17 @@ class Customers extends BaseController {
 
         $result = $this->customers->list_customers($filters, 1, 1000);
 
+        $items = array_values(array_filter(
+            $result['items'],
+            static function ($item) {
+                $agent = $item['assigned_agent'] ?? null;
+
+                return empty($agent);
+            }
+        ));
+
         return $this->success([
-            'items' => $result['items'],
+            'items' => $items,
         ]);
     }
 
