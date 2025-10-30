@@ -7,6 +7,7 @@ class UC_Metaboxes {
         add_meta_box('uc_card_codes', __('Codes (CSV Import)', 'user-cards'), [__CLASS__, 'render_codes_box'], 'uc_card', 'normal', 'default');
         add_meta_box('uc_card_pricing', __('Pricing (Normal + Upsells)', 'user-cards'), [__CLASS__, 'render_pricing_box'], 'uc_card', 'normal', 'default');
         add_meta_box('uc_card_schedule', __('Weekly Schedule', 'user-cards'), [__CLASS__, 'render_schedule_box'], 'uc_card', 'normal', 'default');
+        add_meta_box('uc_card_sms', __('تنظیمات پیامک', 'user-cards'), [__CLASS__, 'render_sms_box'], 'uc_card', 'normal', 'default');
     }
 
     public static function render_card_box($post) {
@@ -325,7 +326,7 @@ class UC_Metaboxes {
             echo '<div class="uc-price-row">';
             echo '<input type="text" name="uc_price_label[]" value="' . esc_attr($label) . '" placeholder="عنوان" />';
             echo '<input type="number" step="0.01" name="uc_price_amount[]" value="' . esc_attr($amount) . '" placeholder="مبلغ" />';
-            echo '<input type="number" step="0.01" name="uc_price_wallet_amount[]" value="' . esc_attr($wallet_amount) . '" placeholder="' . esc_attr__('مبلغ کیف پول', 'user-cards') . '" />';
+            echo '<input type="number" step="0.01" name="uc_price_wallet_amount[]" value="' . esc_attr($wallet_amount) . '" placeholder="' . esc_attr__('مبلغ موجودی', 'user-cards') . '" />';
             echo '<select name="uc_price_code_type[]">';
             $options = [
                 'wallet' => esc_html__('Wallet', 'user-cards'),
@@ -345,7 +346,7 @@ class UC_Metaboxes {
             . '<div class="uc-price-row">'
             . '<input type="text" name="uc_price_label[]" placeholder="عنوان" />'
             . '<input type="number" step="0.01" name="uc_price_amount[]" placeholder="مبلغ" />'
-            . '<input type="number" step="0.01" name="uc_price_wallet_amount[]" value="0" placeholder="' . esc_attr__('مبلغ کیف پول', 'user-cards') . '" />'
+            . '<input type="number" step="0.01" name="uc_price_wallet_amount[]" value="0" placeholder="' . esc_attr__('مبلغ موجودی', 'user-cards') . '" />'
             . '<select name="uc_price_code_type[]">'
             . '<option value="wallet">' . esc_html__('Wallet', 'user-cards') . '</option>'
             . '<option value="coupon">' . esc_html__('Coupon', 'user-cards') . '</option>'
@@ -402,6 +403,100 @@ class UC_Metaboxes {
             }
             update_post_meta($post_id, '_uc_pricings', $rows);
         }
+
+        // SMS settings save
+        if (isset($_POST['uc_sms_nonce']) && wp_verify_nonce($_POST['uc_sms_nonce'], 'uc_sms_save')) {
+            $fields = [
+                '_uc_sms_normal_pattern_code',
+                '_uc_sms_upsell_pattern_code',
+                '_uc_sms_normal_pattern_vars',
+                '_uc_sms_upsell_pattern_vars',
+            ];
+            foreach ($fields as $field) {
+                if (isset($_POST[$field])) {
+                    $value = sanitize_text_field($_POST[$field]);
+                    if (!empty($value)) {
+                        update_post_meta($post_id, $field, $value);
+                    } else {
+                        delete_post_meta($post_id, $field);
+                    }
+                }
+            }
+        }
+    }
+
+    public static function render_sms_box($post) {
+        wp_nonce_field('uc_sms_save', 'uc_sms_nonce');
+
+        $normal_code = get_post_meta($post->ID, '_uc_sms_normal_pattern_code', true);
+        $upsell_code = get_post_meta($post->ID, '_uc_sms_upsell_pattern_code', true);
+        $normal_vars = get_post_meta($post->ID, '_uc_sms_normal_pattern_vars', true);
+        $upsell_vars = get_post_meta($post->ID, '_uc_sms_upsell_pattern_vars', true);
+
+        $available_vars = [
+            'user_name' => 'نام مشتری',
+            'user_family' => 'نام خانوادگی مشتری',
+            'user_mobile' => 'موبایل مشتری',
+            'card_title' => 'عنوان کارت',
+            'submission_id' => 'شناسه فرم',
+            'upsell_items' => 'لیست خرید افزایشی',
+        ];
+
+        ?>
+        <style>
+            .uc-sms-setting { margin-bottom: 20px; }
+            .uc-sms-setting label { font-weight: bold; display: block; margin-bottom: 5px; }
+            .uc-sms-vars-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+            .uc-sms-var-tag { background: #eee; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+            .uc-sms-var-tag:hover { background: #ddd; }
+        </style>
+
+        <div class="uc-sms-setting">
+            <label for="uc_sms_normal_pattern_code">کد قالب پیامک عادی</label>
+            <input type="text" id="uc_sms_normal_pattern_code" name="_uc_sms_normal_pattern_code" value="<?php echo esc_attr($normal_code); ?>" class="regular-text" />
+
+            <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
+            <div class="uc-sms-vars-list">
+                <?php foreach ($available_vars as $key => $label) : ?>
+                    <span class="uc-sms-var-tag" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
+                <?php endforeach; ?>
+            </div>
+
+            <label for="uc_sms_normal_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
+            <input type="text" id="uc_sms_normal_pattern_vars" name="_uc_sms_normal_pattern_vars" value="<?php echo esc_attr($normal_vars); ?>" class="regular-text" placeholder="مثال: user_name,card_title" />
+        </div>
+
+        <div class="uc-sms-setting">
+            <label for="uc_sms_upsell_pattern_code">کد قالب پیامک خرید افزایشی</label>
+            <input type="text" id="uc_sms_upsell_pattern_code" name="_uc_sms_upsell_pattern_code" value="<?php echo esc_attr($upsell_code); ?>" class="regular-text" />
+
+            <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
+            <div class="uc-sms-vars-list">
+                <?php foreach ($available_vars as $key => $label) : ?>
+                    <span class="uc-sms-var-tag" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
+                <?php endforeach; ?>
+            </div>
+
+            <label for="uc_sms_upsell_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
+            <input type="text" id="uc_sms_upsell_pattern_vars" name="_uc_sms_upsell_pattern_vars" value="<?php echo esc_attr($upsell_vars); ?>" class="regular-text" placeholder="مثال: user_name,upsell_items" />
+        </div>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.uc-sms-var-tag').forEach(function(tag) {
+                tag.addEventListener('click', function() {
+                    const varName = this.getAttribute('data-var');
+                    const input = this.closest('.uc-sms-setting').querySelector('input[type="text"][name$="_vars"]');
+                    if (input.value) {
+                        input.value += ',' + varName;
+                    } else {
+                        input.value = varName;
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
     }
 
     // Admin AJAX: fetch posts by type
