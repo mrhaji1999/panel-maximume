@@ -449,27 +449,6 @@ class StatusManager {
 
         return true;
     }
-
-    private function handle_upsell_status($customer_id, $meta, ?int $card_id = null, ?int $submission_id = null) {
-        $phone = get_user_meta($customer_id, 'phone', true);
-        if (!$phone) {
-            $phone = get_user_meta($customer_id, 'billing_phone', true);
-        }
-
-        if ($phone && $card_id) {
-            $body_id = get_post_meta($card_id, '_uc_sms_upsell_pattern_code', true);
-
-            if ($body_id) {
-                $vars_str = get_post_meta($card_id, '_uc_sms_upsell_pattern_vars', true);
-                $vars_order = !empty($vars_str) ? explode(',', $vars_str) : [];
-
-                $params = $this->prepare_sms_params($vars_order, $customer_id, $card_id, $submission_id);
-
-                $sms = new \UCB\SMS\PayamakPanel();
-                $sms->send($customer_id, $phone, $body_id, $params, get_current_user_id());
-            }
-        }
-    }
     
     /**
      * Log status change
@@ -504,9 +483,6 @@ class StatusManager {
         switch ($status) {
             case 'normal':
                 $this->handle_normal_status($customer_id, $meta, $card_id, $submission_id);
-                break;
-            case 'upsell':
-                $this->handle_upsell_status($customer_id, $meta, $card_id, $submission_id);
                 break;
             case 'upsell_pending':
                 $this->handle_upsell_pending_status($customer_id, $meta, $card_id, $submission_id);
@@ -608,6 +584,27 @@ class StatusManager {
      * Handle upsell pending status
      */
     private function handle_upsell_pending_status($customer_id, $meta, ?int $card_id = null, ?int $submission_id = null) {
+        // Send SMS notification
+        $phone = get_user_meta($customer_id, 'phone', true);
+        if (!$phone) {
+            $phone = get_user_meta($customer_id, 'billing_phone', true);
+        }
+
+        if ($phone && $card_id) {
+            $body_id = get_post_meta($card_id, '_uc_sms_upsell_pattern_code', true);
+
+            if ($body_id) {
+                $vars_str = get_post_meta($card_id, '_uc_sms_upsell_pattern_vars', true);
+                $vars_order = !empty($vars_str) ? explode(',', $vars_str) : [];
+
+                // Pass the $meta array as the context to prepare_sms_params
+                $params = $this->prepare_sms_params($vars_order, $customer_id, $card_id, $submission_id, $meta);
+
+                $sms = new \UCB\SMS\PayamakPanel();
+                $sms->send($customer_id, $phone, $body_id, $params, get_current_user_id());
+            }
+        }
+
         // Store order information
         if (isset($meta['order_id'])) {
             update_user_meta($customer_id, 'ucb_upsell_order_id', $meta['order_id']);
@@ -694,10 +691,11 @@ class StatusManager {
         ]);
     }
 
-    private function prepare_sms_params(array $vars_order, int $customer_id, int $card_id, ?int $submission_id): array {
+    private function prepare_sms_params(array $vars_order, int $customer_id, int $card_id, ?int $submission_id, array $context = []): array {
         $params = [];
         $user_data = get_userdata($customer_id);
         $card = get_post($card_id);
+        $wc_exists = function_exists('wc_price');
 
         foreach ($vars_order as $var) {
             $value = '';
@@ -717,23 +715,44 @@ class StatusManager {
                 case 'submission_id':
                     $value = $submission_id ?? '';
                     break;
+                case 'upsell_label':
+                    $value = $context['field_label'] ?? '';
+                    break;
+                case 'upsell_price':
+                    $amount = $context['amount'] ?? 0;
+                    $value = $wc_exists ? wc_price($amount) : $amount;
+                    break;
+                case 'upsell_balance':
+                    $balance = 0;
+                    if (isset($context['field_key'])) {
+                        $pricings = get_post_meta($card_id, '_uc_pricings', true);
+                        if (is_array($pricings)) {
+                            foreach ($pricings as $p) {
+                                if (isset($p['label']) && $p['label'] === $context['field_label']) {
+                                    $balance = $p['wallet_amount'] ?? 0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    $value = $wc_exists ? wc_price($balance) : $balance;
+                    break;
+                case 'upsell_payment_link':
+                    $value = $context['pay_link'] ?? '';
+                    break;
                 case 'upsell_items':
                     $items_str = '';
                     if ($submission_id) {
                         $pricings = get_post_meta($card_id, '_uc_pricings', true);
                         $form_meta = get_post_meta($submission_id, '_uc_meta_fields', true);
-
                         if (is_array($form_meta) && is_array($pricings)) {
                             $upsell_details = [];
-                            // Loop through all pricing rows defined for the card
-                            foreach ($pricings as $pricing_item) {
-                                // Check if a field with a matching label was submitted and checked in the form
-                                if (isset($pricing_item['label']) && !empty($form_meta[$pricing_item['label']])) {
-                                    $upsell_details[] = sprintf(
-                                        '%s: %s (موجودی: %s)',
-                                        $pricing_item['label'],
-                                        function_exists('wc_price') ? wc_price($pricing_item['amount']) : $pricing_item['amount'],
-                                        function_exists('wc_price') ? wc_price($pricing_item['wallet_amount']) : $pricing_item['wallet_amount']
+                            foreach ($pricings as $item) {
+                                if (isset($item['label']) && !empty($form_meta[$item['label']])) {
+                                    $upsell_details[] = sprintf('%s: %s (موجودی: %s)',
+                                        $item['label'],
+                                        $wc_exists ? wc_price($item['amount']) : $item['amount'],
+                                        $wc_exists ? wc_price($item['wallet_amount']) : $item['wallet_amount']
                                     );
                                 }
                             }
@@ -742,7 +761,6 @@ class StatusManager {
                     }
                     $value = $items_str;
                     break;
-                // Add more cases for other submission fields if needed
             }
             $params[] = (string) $value;
         }

@@ -439,46 +439,53 @@ class UC_Metaboxes {
             'user_mobile' => 'موبایل مشتری',
             'card_title' => 'عنوان کارت',
             'submission_id' => 'شناسه فرم',
-            'upsell_items' => 'لیست خرید افزایشی',
+            'upsell_items' => 'لیست کل خریدهای افزایشی',
+            'upsell_label' => 'عنوان خرید افزایشی',
+            'upsell_price' => 'مبلغ خرید افزایشی',
+            'upsell_balance' => 'موجودی خرید افزایشی',
+            'upsell_payment_link' => 'لینک پرداخت',
         ];
 
         ?>
         <style>
-            .uc-sms-setting { margin-bottom: 20px; }
+            .uc-sms-setting { margin-bottom: 20px; border-top: 1px solid #ddd; padding-top: 20px; }
+            .uc-sms-setting h4 { margin-top: 0; }
             .uc-sms-setting label { font-weight: bold; display: block; margin-bottom: 5px; }
-            .uc-sms-vars-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-            .uc-sms-var-tag { background: #eee; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+            .uc-sms-vars-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #eee; }
+            .uc-sms-var-tag { background: #eee; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-family: tahoma; }
             .uc-sms-var-tag:hover { background: #ddd; }
         </style>
 
         <div class="uc-sms-setting">
-            <label for="uc_sms_normal_pattern_code">کد قالب پیامک عادی</label>
+            <h4>پیامک وضعیت عادی</h4>
+            <label for="uc_sms_normal_pattern_code">کد قالب پیامک</label>
             <input type="text" id="uc_sms_normal_pattern_code" name="_uc_sms_normal_pattern_code" value="<?php echo esc_attr($normal_code); ?>" class="regular-text" />
 
-            <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
+            <p class="description">متغیرهای قابل استفاده (برای افزودن به ترتیب، روی آن‌ها کلیک کنید):</p>
             <div class="uc-sms-vars-list">
                 <?php foreach ($available_vars as $key => $label) : ?>
-                    <span class="uc-sms-var-tag" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
+                    <span class="uc-sms-var-tag" data-target="uc_sms_normal_pattern_vars" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
                 <?php endforeach; ?>
             </div>
 
-            <label for="uc_sms_normal_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
-            <input type="text" id="uc_sms_normal_pattern_vars" name="_uc_sms_normal_pattern_vars" value="<?php echo esc_attr($normal_vars); ?>" class="regular-text" placeholder="مثال: user_name,card_title" />
+            <label for="uc_sms_normal_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا شده)</label>
+            <input type="text" id="uc_sms_normal_pattern_vars" name="_uc_sms_normal_pattern_vars" value="<?php echo esc_attr($normal_vars); ?>" class="large-text" placeholder="مثال: user_name,card_title" />
         </div>
 
         <div class="uc-sms-setting">
-            <label for="uc_sms_upsell_pattern_code">کد قالب پیامک خرید افزایشی</label>
+            <h4>پیامک خرید افزایشی (در انتظار پرداخت)</h4>
+            <label for="uc_sms_upsell_pattern_code">کد قالب پیامک</label>
             <input type="text" id="uc_sms_upsell_pattern_code" name="_uc_sms_upsell_pattern_code" value="<?php echo esc_attr($upsell_code); ?>" class="regular-text" />
 
-            <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
+            <p class="description">متغیرهای قابل استفاده (برای افزودن به ترتیب، روی آن‌ها کلیک کنید):</p>
             <div class="uc-sms-vars-list">
                 <?php foreach ($available_vars as $key => $label) : ?>
-                    <span class="uc-sms-var-tag" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
+                    <span class="uc-sms-var-tag" data-target="uc_sms_upsell_pattern_vars" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
                 <?php endforeach; ?>
             </div>
 
-            <label for="uc_sms_upsell_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
-            <input type="text" id="uc_sms_upsell_pattern_vars" name="_uc_sms_upsell_pattern_vars" value="<?php echo esc_attr($upsell_vars); ?>" class="regular-text" placeholder="مثال: user_name,upsell_items" />
+            <label for="uc_sms_upsell_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا شده)</label>
+            <input type="text" id="uc_sms_upsell_pattern_vars" name="_uc_sms_upsell_pattern_vars" value="<?php echo esc_attr($upsell_vars); ?>" class="large-text" placeholder="مثال: user_name,upsell_payment_link" />
         </div>
 
         <script>
@@ -486,11 +493,14 @@ class UC_Metaboxes {
             document.querySelectorAll('.uc-sms-var-tag').forEach(function(tag) {
                 tag.addEventListener('click', function() {
                     const varName = this.getAttribute('data-var');
-                    const input = this.closest('.uc-sms-setting').querySelector('input[type="text"][name$="_vars"]');
-                    if (input.value) {
-                        input.value += ',' + varName;
-                    } else {
-                        input.value = varName;
+                    const targetInputId = this.getAttribute('data-target');
+                    const input = document.getElementById(targetInputId);
+                    if (input) {
+                        if (input.value) {
+                            input.value += ',' + varName;
+                        } else {
+                            input.value = varName;
+                        }
                     }
                 });
             });
