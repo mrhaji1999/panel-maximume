@@ -21,6 +21,7 @@ require_once UC_PLUGIN_DIR . 'includes/class-uc-assets.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-shortcodes.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-ajax.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-admin.php';
+require_once UC_PLUGIN_DIR . 'includes/class-uc-settings.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-sms.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-redirects.php';
 
@@ -34,6 +35,7 @@ class UC_Bootstrap {
         add_action('admin_enqueue_scripts', ['UC_Assets', 'admin']);
         add_action('wp_enqueue_scripts', ['UC_Assets', 'frontend']);
         add_action('admin_init', ['UC_Admin', 'init']);
+        UC_Settings::init();
         UC_Redirects::init();
 
         // Shortcodes

@@ -22,6 +22,14 @@ class UC_SMS {
         $pattern_code = get_post_meta($card_id, '_uc_sms_normal_pattern_code', true);
         $pattern_vars = get_post_meta($card_id, '_uc_sms_normal_pattern_vars', true);
 
+        if (empty($pattern_code)) {
+            $pattern_code = get_option('uc_sms_default_pattern_code', '');
+        }
+
+        if (empty($pattern_vars)) {
+            $pattern_vars = get_option('uc_sms_default_pattern_vars', '');
+        }
+
         if (empty($pattern_code) || empty($pattern_vars)) {
             return;
         }
