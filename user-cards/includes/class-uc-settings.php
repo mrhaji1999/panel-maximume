@@ -40,10 +40,12 @@ class UC_Settings {
             'user_mobile'   => 'موبایل مشتری',
             'card_title'    => 'عنوان کارت',
             'submission_id' => 'شناسه فرم',
+            'card_code'     => 'کد وارد شده توسط کاربر',
             'jalali_date'   => 'تاریخ انتخابی (شمسی)',
             'selected_time' => 'ساعت انتخابی',
             'surprise_code' => 'کد سوپرایز',
             'upsell_items'  => 'لیست خرید افزایشی',
+            'gregorian_date' => 'تاریخ انتخابی (میلادی)',
         ];
         ?>
         <div class="wrap">
@@ -76,6 +78,7 @@ class UC_Settings {
                             <td>
                                 <input name="uc_sms_default_pattern_vars" type="text" id="uc_sms_default_pattern_vars" value="<?php echo esc_attr($pattern_vars); ?>" class="regular-text" placeholder="مثال: user_name,card_title,jalali_date">
                                 <p class="description"><?php esc_html_e('متغیرها را دقیقاً مطابق با الگوی ثبت شده در سامانه پیامک و با جداکننده ویرگول وارد کنید.', 'user-cards'); ?></p>
+                                <p class="description"><?php esc_html_e('اگر این بخش خالی باشد، ترتیب پیش‌فرض user_name,card_title,jalali_date,selected_time,surprise_code استفاده خواهد شد.', 'user-cards'); ?></p>
                                 <div class="uc-sms-vars-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
                                     <?php foreach ($available_vars as $key => $label) : ?>
                                         <span class="uc-sms-var-tag" data-target="uc_sms_default_pattern_vars" data-var="<?php echo esc_attr($key); ?>" style="background:#eee;padding:4px 8px;border-radius:4px;cursor:pointer;display:inline-block;">

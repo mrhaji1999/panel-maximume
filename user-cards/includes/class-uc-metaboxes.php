@@ -442,10 +442,12 @@ class UC_Metaboxes {
             'user_mobile'   => 'موبایل مشتری',
             'card_title'    => 'عنوان کارت',
             'submission_id' => 'شناسه فرم',
+            'card_code'     => 'کد وارد شده توسط کاربر',
             'jalali_date'   => 'تاریخ انتخابی (شمسی)',
             'selected_time' => 'ساعت انتخابی',
             'surprise_code' => 'کد سوپرایز',
             'upsell_items'  => 'لیست خرید افزایشی',
+            'gregorian_date' => 'تاریخ انتخابی (میلادی)',
         ];
 
         ?>
