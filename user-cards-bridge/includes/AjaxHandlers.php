@@ -152,8 +152,10 @@ class AjaxHandlers {
         }
         
         $settings = [
+            'ucb_sms_gateway' => sanitize_key($_POST['ucb_sms_gateway'] ?? 'payamak_panel'),
             'ucb_sms_username' => sanitize_text_field($_POST['ucb_sms_username'] ?? ''),
             'ucb_sms_password' => sanitize_text_field($_POST['ucb_sms_password'] ?? ''),
+            'ucb_sms_sender_number' => sanitize_text_field($_POST['ucb_sms_sender_number'] ?? ''),
             'ucb_sms_normal_body_id' => sanitize_text_field($_POST['ucb_sms_normal_body_id'] ?? ''),
             'ucb_sms_upsell_body_id' => sanitize_text_field($_POST['ucb_sms_upsell_body_id'] ?? ''),
             'ucb_payment_token_expiry' => (int) ($_POST['ucb_payment_token_expiry'] ?? 24),

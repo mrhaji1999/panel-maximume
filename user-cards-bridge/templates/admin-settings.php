@@ -10,8 +10,15 @@ if (!defined('ABSPATH')) {
 // Handle form submission
 if (isset($_POST['submit']) && wp_verify_nonce($_POST['ucb_settings_nonce'], 'ucb_settings')) {
     // SMS Settings
+    $sms_gateway = isset($_POST['ucb_sms_gateway']) ? sanitize_key($_POST['ucb_sms_gateway']) : 'payamak_panel';
+    if (!in_array($sms_gateway, ['payamak_panel', 'iran_payamak'], true)) {
+        $sms_gateway = 'payamak_panel';
+    }
+
+    update_option('ucb_sms_gateway', $sms_gateway);
     update_option('ucb_sms_username', sanitize_text_field($_POST['ucb_sms_username']));
     update_option('ucb_sms_password', sanitize_text_field($_POST['ucb_sms_password']));
+    update_option('ucb_sms_sender_number', sanitize_text_field($_POST['ucb_sms_sender_number']));
     update_option('ucb_sms_normal_body_id', sanitize_text_field($_POST['ucb_sms_normal_body_id']));
     update_option('ucb_sms_upsell_body_id', sanitize_text_field($_POST['ucb_sms_upsell_body_id']));
     update_option('ucb_sms_coupon_body_id', sanitize_text_field($_POST['ucb_sms_coupon_body_id']));
@@ -58,8 +65,10 @@ if (isset($_POST['submit']) && wp_verify_nonce($_POST['ucb_settings_nonce'], 'uc
 }
 
 // Get current settings
+$sms_gateway = get_option('ucb_sms_gateway', 'payamak_panel');
 $sms_username = get_option('ucb_sms_username', '');
 $sms_password = get_option('ucb_sms_password', '');
+$sms_sender_number = get_option('ucb_sms_sender_number', '');
 $sms_normal_body_id = get_option('ucb_sms_normal_body_id', '');
 $sms_upsell_body_id = get_option('ucb_sms_upsell_body_id', '');
 $sms_coupon_body_id = get_option('ucb_sms_coupon_body_id', '');
@@ -99,17 +108,29 @@ $wallet_code_expiry_days = (int) get_option('ucb_wallet_code_expiry_days', 0);
             <!-- SMS Settings Tab -->
             <div id="sms-settings" class="tab-content active">
                 <h2><?php _e('SMS Configuration', UCB_TEXT_DOMAIN); ?></h2>
-                <p><?php _e('Configure SMS settings for Payamak Panel integration.', UCB_TEXT_DOMAIN); ?></p>
-                
+                <p><?php _e('Configure SMS settings and choose the gateway integration.', UCB_TEXT_DOMAIN); ?></p>
+
                 <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_sms_gateway"><?php _e('SMS Gateway', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <select id="ucb_sms_gateway" name="ucb_sms_gateway">
+                                <option value="payamak_panel" <?php selected($sms_gateway, 'payamak_panel'); ?>><?php esc_html_e('Payamak Panel', UCB_TEXT_DOMAIN); ?></option>
+                                <option value="iran_payamak" <?php selected($sms_gateway, 'iran_payamak'); ?>><?php esc_html_e('IranPayamak', UCB_TEXT_DOMAIN); ?></option>
+                            </select>
+                            <p class="description"><?php _e('Select the service provider used for sending SMS messages.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
                     <tr>
                         <th scope="row">
                             <label for="ucb_sms_username"><?php _e('Username', UCB_TEXT_DOMAIN); ?></label>
                         </th>
                         <td>
-                            <input type="text" id="ucb_sms_username" name="ucb_sms_username" 
+                            <input type="text" id="ucb_sms_username" name="ucb_sms_username"
                                    value="<?php echo esc_attr($sms_username); ?>" class="regular-text" required>
-                            <p class="description"><?php _e('Your Payamak Panel username.', UCB_TEXT_DOMAIN); ?></p>
+                            <p class="description"><?php _e('Your SMS gateway username.', UCB_TEXT_DOMAIN); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -117,9 +138,19 @@ $wallet_code_expiry_days = (int) get_option('ucb_wallet_code_expiry_days', 0);
                             <label for="ucb_sms_password"><?php _e('Password', UCB_TEXT_DOMAIN); ?></label>
                         </th>
                         <td>
-                            <input type="password" id="ucb_sms_password" name="ucb_sms_password" 
+                            <input type="password" id="ucb_sms_password" name="ucb_sms_password"
                                    value="<?php echo esc_attr($sms_password); ?>" class="regular-text" required>
-                            <p class="description"><?php _e('Your Payamak Panel password.', UCB_TEXT_DOMAIN); ?></p>
+                            <p class="description"><?php _e('Your SMS gateway password.', UCB_TEXT_DOMAIN); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ucb_sms_sender_number"><?php _e('Sender Number', UCB_TEXT_DOMAIN); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="ucb_sms_sender_number" name="ucb_sms_sender_number"
+                                   value="<?php echo esc_attr($sms_sender_number); ?>" class="regular-text">
+                            <p class="description"><?php _e('Optional. Required when the selected gateway expects a dedicated sender line (e.g. IranPayamak).', UCB_TEXT_DOMAIN); ?></p>
                         </td>
                     </tr>
                     <tr>

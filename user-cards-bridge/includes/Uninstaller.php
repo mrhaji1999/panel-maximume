@@ -49,6 +49,8 @@ class Uninstaller {
         $options = [
             'ucb_sms_username',
             'ucb_sms_password',
+            'ucb_sms_gateway',
+            'ucb_sms_sender_number',
             'ucb_sms_normal_body_id',
             'ucb_sms_upsell_body_id',
             'ucb_jwt_secret_key',

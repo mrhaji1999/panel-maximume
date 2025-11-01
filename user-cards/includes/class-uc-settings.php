@@ -19,8 +19,13 @@ class UC_Settings {
     }
 
     public static function register_settings() {
+        register_setting('uc_sms_settings', 'uc_sms_gateway', [
+            'sanitize_callback' => [__CLASS__, 'sanitize_gateway'],
+            'default' => 'payamak_panel',
+        ]);
         register_setting('uc_sms_settings', 'uc_sms_username', ['sanitize_callback' => 'sanitize_text_field']);
         register_setting('uc_sms_settings', 'uc_sms_password', ['sanitize_callback' => 'sanitize_text_field']);
+        register_setting('uc_sms_settings', 'uc_sms_sender_number', ['sanitize_callback' => [__CLASS__, 'sanitize_sender_number']]);
         register_setting('uc_sms_settings', 'uc_sms_default_pattern_code', ['sanitize_callback' => 'sanitize_text_field']);
         register_setting('uc_sms_settings', 'uc_sms_default_pattern_vars', ['sanitize_callback' => [__CLASS__, 'sanitize_vars']]);
     }
@@ -30,8 +35,10 @@ class UC_Settings {
             return;
         }
 
+        $gateway = get_option('uc_sms_gateway', 'payamak_panel');
         $username = get_option('uc_sms_username', '');
         $password = get_option('uc_sms_password', '');
+        $sender_number = get_option('uc_sms_sender_number', '');
         $pattern_code = get_option('uc_sms_default_pattern_code', '');
         $pattern_vars = get_option('uc_sms_default_pattern_vars', '');
         $available_vars = [
@@ -59,12 +66,29 @@ class UC_Settings {
                 <table class="form-table" role="presentation">
                     <tbody>
                         <tr>
+                            <th scope="row"><label for="uc_sms_gateway"><?php esc_html_e('درگاه پیامک', 'user-cards'); ?></label></th>
+                            <td>
+                                <select name="uc_sms_gateway" id="uc_sms_gateway">
+                                    <option value="payamak_panel" <?php selected($gateway, 'payamak_panel'); ?>><?php esc_html_e('Payamak Panel', 'user-cards'); ?></option>
+                                    <option value="iran_payamak" <?php selected($gateway, 'iran_payamak'); ?>><?php esc_html_e('IranPayamak', 'user-cards'); ?></option>
+                                </select>
+                                <p class="description"><?php esc_html_e('درگاه موردنظر برای ارسال پیامک را انتخاب کنید.', 'user-cards'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
                             <th scope="row"><label for="uc_sms_username"><?php esc_html_e('نام کاربری پنل پیامک', 'user-cards'); ?></label></th>
                             <td><input name="uc_sms_username" type="text" id="uc_sms_username" value="<?php echo esc_attr($username); ?>" class="regular-text"></td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="uc_sms_password"><?php esc_html_e('کلمه عبور پنل پیامک', 'user-cards'); ?></label></th>
                             <td><input name="uc_sms_password" type="password" id="uc_sms_password" value="<?php echo esc_attr($password); ?>" class="regular-text"></td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="uc_sms_sender_number"><?php esc_html_e('شماره ارسال‌کننده', 'user-cards'); ?></label></th>
+                            <td>
+                                <input name="uc_sms_sender_number" type="text" id="uc_sms_sender_number" value="<?php echo esc_attr($sender_number); ?>" class="regular-text">
+                                <p class="description"><?php esc_html_e('در صورت استفاده از درگاه‌هایی که نیاز به شماره فرستنده اختصاصی دارند، این مقدار را وارد کنید.', 'user-cards'); ?></p>
+                            </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="uc_sms_default_pattern_code"><?php esc_html_e('کد الگوی پیش‌فرض (bodyId)', 'user-cards'); ?></label></th>
@@ -112,6 +136,25 @@ class UC_Settings {
         });
         </script>
         <?php
+    }
+
+    public static function sanitize_gateway($value) {
+        $value = sanitize_key((string) $value);
+        $allowed = ['payamak_panel', 'iran_payamak'];
+
+        if (!in_array($value, $allowed, true)) {
+            return 'payamak_panel';
+        }
+
+        return $value;
+    }
+
+    public static function sanitize_sender_number($value) {
+        if (!is_string($value)) {
+            return '';
+        }
+
+        return sanitize_text_field($value);
     }
 
     public static function sanitize_vars($value) {

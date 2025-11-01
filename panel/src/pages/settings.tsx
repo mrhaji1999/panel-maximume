@@ -18,10 +18,12 @@ export function SettingsPage() {
   const { success: notifySuccess } = useNotification()
   const [settings, setSettings] = useState({
     // SMS Settings
+    sms_gateway: 'payamak_panel',
     sms_username: '',
     sms_password: '',
     sms_normal_body_id: '',
     sms_upsell_body_id: '',
+    sms_sender_number: '',
     
     // API Settings
     payment_token_expiry: 24,
@@ -96,11 +98,24 @@ export function SettingsPage() {
             <span>تنظیمات پیامک</span>
           </CardTitle>
           <CardDescription>
-            پیکربندی سرویس پیامک Payamak Panel
+            پیکربندی سرویس پیامک و انتخاب درگاه موردنظر
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-1">
+                درگاه پیامک
+              </label>
+              <select
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={settings.sms_gateway}
+                onChange={(e) => setSettings({ ...settings, sms_gateway: e.target.value })}
+              >
+                <option value="payamak_panel">Payamak Panel</option>
+                <option value="iran_payamak">IranPayamak</option>
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium mb-1">
                 نام کاربری
@@ -109,7 +124,7 @@ export function SettingsPage() {
                 type="text"
                 value={settings.sms_username}
                 onChange={(e) => setSettings({ ...settings, sms_username: e.target.value })}
-                placeholder="نام کاربری Payamak Panel"
+                placeholder="نام کاربری سرویس پیامک"
               />
             </div>
             <div>
@@ -120,8 +135,22 @@ export function SettingsPage() {
                 type="password"
                 value={settings.sms_password}
                 onChange={(e) => setSettings({ ...settings, sms_password: e.target.value })}
-                placeholder="رمز عبور Payamak Panel"
+                placeholder="رمز عبور سرویس پیامک"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                شماره ارسال‌کننده (اختیاری)
+              </label>
+              <Input
+                type="text"
+                value={settings.sms_sender_number}
+                onChange={(e) => setSettings({ ...settings, sms_sender_number: e.target.value })}
+                placeholder="مثال: 5000xxxx"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                برای درگاه‌هایی که نیاز به خط اختصاصی دارند (مانند IranPayamak) این مقدار را وارد کنید.
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">
