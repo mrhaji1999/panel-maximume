@@ -162,6 +162,31 @@ class UC_Settings {
                                 <p class="description" id="uc_sms_send_test_status" style="margin-top:8px;"></p>
                             </td>
                         </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('تست اتصال', 'user-cards'); ?></th>
+                            <td>
+                                <button type="button" class="button" id="uc_sms_test_connection"><?php esc_html_e('بررسی اتصال', 'user-cards'); ?></button>
+                                <p class="description" id="uc_sms_test_connection_status" style="margin-top:8px;"></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="uc_sms_test_phone"><?php esc_html_e('شماره موبایل تست', 'user-cards'); ?></label></th>
+                            <td>
+                                <input type="text" id="uc_sms_test_phone" class="regular-text" placeholder="09xxxxxxxxx">
+                                <p class="description"><?php esc_html_e('پیامک تستی به این شماره ارسال خواهد شد. لطفاً شماره را با قالب صحیح وارد کنید.', 'user-cards'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="uc_sms_test_variables"><?php esc_html_e('مقادیر متغیرهای پیامک تستی', 'user-cards'); ?></label></th>
+                            <td>
+                                <textarea id="uc_sms_test_variables" rows="4" class="large-text" placeholder="user_name=کاربر نمونه&#10;card_title=کارت تست"></textarea>
+                                <p class="description"><?php esc_html_e('می‌توانید مقادیر متغیرها را به صورت key=value در هر خط وارد کنید یا تنها مقادیر را مطابق ترتیب متغیرها با ویرگول جدا نمایید.', 'user-cards'); ?></p>
+                                <button type="button" class="button button-primary" id="uc_sms_send_test" style="margin-top:10px;">
+                                    <?php esc_html_e('ارسال پیامک تستی', 'user-cards'); ?>
+                                </button>
+                                <p class="description" id="uc_sms_send_test_status" style="margin-top:8px;"></p>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
                 <?php submit_button(); ?>
