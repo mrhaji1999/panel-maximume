@@ -6,6 +6,12 @@ if (!defined('ABSPATH')) { exit; }
  */
 class UC_SMS {
     /** @var string */
+    const GATEWAY_PAYAMAK_PANEL = 'payamak_panel';
+
+    /** @var string */
+    const GATEWAY_IRAN_PAYAMAK = 'iran_payamak';
+
+    /** @var string */
     const WSDL = 'http://api.payamak-panel.com/post/Send.asmx?wsdl';
 
     /** @var string */
@@ -15,7 +21,21 @@ class UC_SMS {
     const SOAP_ACTION = 'http://tempuri.org/SendByBaseNumber';
 
     /** @var string */
+    const IRAN_PAYAMAK_PATTERN_ENDPOINT = 'https://rest.iranpayamak.com/api/Pattern/Send';
+
+    /** @var string */
     const DEFAULT_VARIABLE_ORDER = 'user_name,card_title,jalali_date,selected_time,surprise_code';
+
+    protected static function get_gateway_slug() {
+        $gateway = get_option('uc_sms_gateway', self::GATEWAY_PAYAMAK_PANEL);
+        $gateway = is_string($gateway) ? sanitize_key($gateway) : self::GATEWAY_PAYAMAK_PANEL;
+
+        if (!in_array($gateway, [self::GATEWAY_PAYAMAK_PANEL, self::GATEWAY_IRAN_PAYAMAK], true)) {
+            $gateway = self::GATEWAY_PAYAMAK_PANEL;
+        }
+
+        return (string) apply_filters('uc_sms_active_gateway', $gateway);
+    }
 
     /**
      * Send confirmation SMS after a submission is created.
@@ -62,8 +82,11 @@ class UC_SMS {
             $password = get_option('uc_sms_password', '');
         }
 
+        $sender_number = trim((string) get_option('uc_sms_sender_number', ''));
+
         $username = apply_filters('uc_sms_username', $username, $submission_id, $card_id, $context);
         $password = apply_filters('uc_sms_password', $password, $submission_id, $card_id, $context);
+        $sender_number = apply_filters('uc_sms_sender_number', $sender_number, $submission_id, $card_id, $context);
 
         if (empty($username) || empty($password)) {
             return;
@@ -96,12 +119,26 @@ class UC_SMS {
 
         $payload = apply_filters('uc_sms_payload', $payload, $variables_map, $submission_id, $card_id, $context);
 
-        if (empty($payload['username']) || empty($payload['password']) || empty($payload['to']) || empty($payload['bodyId'])) {
-            return;
+        $gateway = self::get_gateway_slug();
+
+        if (self::GATEWAY_PAYAMAK_PANEL === $gateway) {
+            if (empty($payload['username']) || empty($payload['password']) || empty($payload['to']) || empty($payload['bodyId'])) {
+                return;
+            }
         }
 
         try {
-            $response = self::dispatch($payload);
+            $response = self::dispatch($gateway, $payload, [
+                'username'       => $username,
+                'password'       => $password,
+                'sender_number'  => $sender_number,
+                'phone'          => $phone,
+                'pattern_code'   => $pattern_code,
+                'variables_map'  => $variables_map,
+                'variable_keys'  => $keys,
+                'text_variables' => $text_variables,
+                'payload'        => $payload,
+            ]);
             do_action('uc_sms_dispatched', $submission_id, $card_id, $response, $payload, $variables_map, $context);
         } catch (\Throwable $exception) {
             error_log('UC_SMS: Failed to send SMS - ' . $exception->getMessage());
@@ -260,7 +297,15 @@ class UC_SMS {
         return array_values(array_unique($normalized));
     }
 
-    protected static function dispatch(array $payload) {
+    protected static function dispatch($gateway, array $payload, array $context) {
+        if (self::GATEWAY_IRAN_PAYAMAK === $gateway) {
+            return self::dispatch_with_iran_payamak($context);
+        }
+
+        return self::dispatch_with_payamak_panel($payload);
+    }
+
+    protected static function dispatch_with_payamak_panel(array $payload) {
         if (empty($payload['text']) || !is_array($payload['text'])) {
             throw new \InvalidArgumentException('UC_SMS: Payload text must be an array.');
         }
@@ -282,6 +327,164 @@ class UC_SMS {
         return [
             'transport' => 'http',
             'result'    => $result,
+        ];
+    }
+
+    protected static function dispatch_with_iran_payamak(array $context) {
+        if (!function_exists('wp_remote_post')) {
+            throw new \RuntimeException('UC_SMS: wp_remote_post is not available.');
+        }
+
+        $username = isset($context['username']) ? (string) $context['username'] : '';
+        $password = isset($context['password']) ? (string) $context['password'] : '';
+        $sender   = isset($context['sender_number']) ? (string) $context['sender_number'] : '';
+        $phone    = isset($context['phone']) ? (string) $context['phone'] : '';
+        $pattern  = isset($context['pattern_code']) ? (string) $context['pattern_code'] : '';
+        $keys     = isset($context['variable_keys']) && is_array($context['variable_keys']) ? $context['variable_keys'] : [];
+        $variables_map = isset($context['variables_map']) && is_array($context['variables_map']) ? $context['variables_map'] : [];
+        $text_variables = isset($context['text_variables']) && is_array($context['text_variables']) ? $context['text_variables'] : [];
+
+        if ($username === '' || $password === '' || $phone === '' || $pattern === '') {
+            throw new \RuntimeException('UC_SMS: Missing required IranPayamak parameters.');
+        }
+
+        $input_data = [];
+
+        if (!empty($keys)) {
+            foreach ($keys as $index => $key) {
+                $value = '';
+                if (isset($variables_map[$key])) {
+                    $value = (string) $variables_map[$key];
+                } elseif (isset($text_variables[$index])) {
+                    $value = (string) $text_variables[$index];
+                }
+
+                $input_data[] = [
+                    'Parameter' => $key,
+                    'Name'      => $key,
+                    'Value'     => $value,
+                ];
+            }
+        } else {
+            foreach ($text_variables as $index => $value) {
+                $input_data[] = [
+                    'Parameter' => 'value' . ($index + 1),
+                    'Name'      => 'value' . ($index + 1),
+                    'Value'     => (string) $value,
+                ];
+            }
+        }
+
+        $values = array_map('strval', $text_variables);
+
+        $request_body = [
+            'username'     => $username,
+            'password'     => $password,
+            'to'           => [$phone],
+            'mobile'       => [$phone],
+            'recipient'    => $phone,
+            'pattern_code' => $pattern,
+            'patternCode'  => $pattern,
+            'input_data'   => $input_data,
+            'inputData'    => $input_data,
+            'values'       => $values,
+        ];
+
+        if ($sender !== '') {
+            $request_body['from'] = $sender;
+            $request_body['originator'] = $sender;
+        }
+
+        $request_body = apply_filters('uc_sms_iranpayamak_payload', $request_body, $context);
+
+        $response = wp_remote_post(self::IRAN_PAYAMAK_PATTERN_ENDPOINT, [
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+            'body'    => wp_json_encode($request_body),
+            'timeout' => 20,
+        ]);
+
+        if (is_wp_error($response)) {
+            throw new \RuntimeException('UC_SMS: IranPayamak transport error - ' . $response->get_error_message());
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+        $raw_body = (string) wp_remote_retrieve_body($response);
+
+        if ($code < 200 || $code >= 300) {
+            throw new \RuntimeException('UC_SMS: IranPayamak HTTP status ' . $code . ' - ' . $raw_body);
+        }
+
+        $data = null;
+        if ($raw_body !== '') {
+            $decoded = json_decode($raw_body, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $data = $decoded;
+            }
+        }
+
+        $result_code = '';
+        $message = '';
+        $success = true;
+
+        if (is_array($data)) {
+            $status_candidates = [];
+            if (array_key_exists('status', $data)) {
+                $status_candidates[] = $data['status'];
+            }
+            if (array_key_exists('Status', $data)) {
+                $status_candidates[] = $data['Status'];
+            }
+
+            foreach ($status_candidates as $status_value) {
+                if (is_bool($status_value)) {
+                    $success = $success && $status_value;
+                } elseif (is_numeric($status_value)) {
+                    $success = $success && ((int) $status_value >= 0);
+                } else {
+                    $normalized = strtolower((string) $status_value);
+                    if (in_array($normalized, ['false', 'failed', 'error'], true)) {
+                        $success = false;
+                    }
+                }
+            }
+
+            if (isset($data['code']) || isset($data['Code'])) {
+                $code_value = isset($data['code']) ? $data['code'] : $data['Code'];
+                if (is_numeric($code_value) && (int) $code_value < 0) {
+                    $success = false;
+                }
+                $result_code = (string) $code_value;
+            }
+
+            if (isset($data['recId']) || isset($data['RecId'])) {
+                $result_code = (string) ($data['recId'] ?? $data['RecId']);
+            }
+
+            if (isset($data['message']) || isset($data['Message'])) {
+                $message = (string) ($data['message'] ?? $data['Message']);
+            }
+        } else {
+            $result_code = $raw_body !== '' ? $raw_body : 'success';
+        }
+
+        if (!$success) {
+            if ($message === '') {
+                $message = $result_code !== '' ? $result_code : 'Gateway reported failure.';
+            }
+
+            throw new \RuntimeException('UC_SMS: IranPayamak error - ' . $message);
+        }
+
+        if ($result_code === '') {
+            $result_code = 'success';
+        }
+
+        return [
+            'transport' => 'rest',
+            'result'    => $result_code,
+            'response'  => $data !== null ? $data : $raw_body,
         ];
     }
 

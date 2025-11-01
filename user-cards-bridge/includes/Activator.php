@@ -153,8 +153,10 @@ class Activator {
     
     private static function set_default_options() {
         $default_options = [
+            'ucb_sms_gateway' => 'payamak_panel',
             'ucb_sms_username' => '',
             'ucb_sms_password' => '',
+            'ucb_sms_sender_number' => '',
             'ucb_sms_normal_body_id' => '',
             'ucb_sms_upsell_body_id' => '',
             'ucb_jwt_secret_key' => wp_generate_password(64, true, true),
