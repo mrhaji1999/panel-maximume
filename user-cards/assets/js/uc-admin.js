@@ -6,6 +6,118 @@
     return fallback || '';
   }
 
+  function parseJSONValue(value){
+    if (!value) { return []; }
+    try {
+      var parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function sanitizePlaceholder(value){
+    return (value || '').toString().trim().replace(/[^A-Za-z0-9_]/g, '');
+  }
+
+  function sanitizeSource(value){
+    return (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  }
+
+  function getDataArray($el, key){
+    var data = $el.data(key);
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); }
+      catch (e) { data = []; }
+    }
+    if (!Array.isArray(data)) { data = []; }
+    return data;
+  }
+
+  function syncRepeater($container){
+    var target = $container.data('target');
+    var $hidden = $('#' + target);
+    if (!$hidden.length) { return; }
+    var mode = $container.data('mode') || 'mapping';
+    var rows = [];
+
+    $container.find('.uc-sms-variable-row').each(function(){
+      var $row = $(this);
+      var placeholder = sanitizePlaceholder($row.find('.uc-sms-variable-placeholder').val());
+      if (!placeholder) { return; }
+
+      if (mode === 'mapping') {
+        var source = sanitizeSource($row.find('.uc-sms-variable-source').val());
+        if (!source) { return; }
+        rows.push({ placeholder: placeholder, source: source });
+      } else {
+        var value = $row.find('.uc-sms-variable-value').val();
+        rows.push({ placeholder: placeholder, value: value == null ? '' : value });
+      }
+    });
+
+    $hidden.val(rows.length ? JSON.stringify(rows) : '');
+  }
+
+  function renderRepeater($container){
+    var target = $container.data('target');
+    var $hidden = $('#' + target);
+    if (!$hidden.length) { return; }
+
+    var mode = $container.data('mode') || 'mapping';
+    var available = getDataArray($container, 'available');
+    var defaults = getDataArray($container, 'defaults');
+    var initialValue = $hidden.val();
+    var rows = parseJSONValue(initialValue);
+    var usedDefaults = false;
+
+    if (!rows.length && defaults.length) {
+      rows = defaults;
+      usedDefaults = true;
+    }
+
+    if (!rows.length) {
+      rows = [mode === 'mapping' ? { placeholder: '', source: '' } : { placeholder: '', value: '' }];
+    }
+
+    $container.empty();
+    rows.forEach(function(row){
+      var placeholder = row && row.placeholder ? row.placeholder : '';
+      var $row = $('<div class="uc-sms-variable-row"></div>');
+      var $placeholder = $('<input type="text" class="uc-sms-variable-placeholder" />')
+        .attr('placeholder', getText('variablePlaceholder', 'نام متغیر (مثال: name)'))
+        .val(placeholder);
+      $row.append($placeholder);
+
+      if (mode === 'mapping') {
+        var $select = $('<select class="uc-sms-variable-source"></select>');
+        $select.append($('<option></option>').attr('value', '').text(getText('selectValue', '-- انتخاب مقدار --')));
+        available.forEach(function(item){
+          if (!item || typeof item.value === 'undefined') { return; }
+          var option = $('<option></option>').attr('value', item.value).text(item.label || item.value);
+          if (row && row.source && row.source === item.value) {
+            option.prop('selected', true);
+          }
+          $select.append(option);
+        });
+        $row.append($select);
+      } else {
+        var $value = $('<input type="text" class="uc-sms-variable-value" />')
+          .attr('placeholder', getText('enterValue', 'مقدار تستی'))
+          .val(row && typeof row.value !== 'undefined' ? row.value : '');
+        $row.append($value);
+      }
+
+      var $remove = $('<button type="button" class="button-link button-link-delete uc-sms-variable-remove" aria-label="' + getText('removeRow', 'حذف') + '">&times;</button>');
+      $row.append($remove);
+      $container.append($row);
+    });
+
+    if (!usedDefaults || initialValue) {
+      syncRepeater($container);
+    }
+  }
+
   function setStatus($el, type, message){
     if(!$el || !$el.length) return;
     var colors = {
@@ -166,6 +278,41 @@
       setStatus($status, 'error', msg);
     }).always(function(){
       $btn.prop('disabled', false);
+    });
+  });
+
+  $(document).on('click', '.uc-sms-variable-add', function(e){
+    e.preventDefault();
+    var target = $(this).data('target');
+    if (!target) { return; }
+    var $container = $('.uc-sms-variables-repeater[data-target="' + target + '"]').first();
+    if (!$container.length) { return; }
+    var mode = $container.data('mode') || 'mapping';
+    var rows = parseJSONValue($('#' + target).val());
+    if (!rows.length) {
+      rows = getDataArray($container, 'defaults');
+    }
+    rows = rows.slice();
+    rows.push(mode === 'mapping' ? { placeholder: '', source: '' } : { placeholder: '', value: '' });
+    $('#' + target).val(JSON.stringify(rows));
+    renderRepeater($container);
+  });
+
+  $(document).on('click', '.uc-sms-variable-remove', function(e){
+    e.preventDefault();
+    var $container = $(this).closest('.uc-sms-variables-repeater');
+    $(this).closest('.uc-sms-variable-row').remove();
+    syncRepeater($container);
+  });
+
+  $(document).on('input change', '.uc-sms-variable-placeholder, .uc-sms-variable-source, .uc-sms-variable-value', function(){
+    var $container = $(this).closest('.uc-sms-variables-repeater');
+    syncRepeater($container);
+  });
+
+  $(function(){
+    $('.uc-sms-variables-repeater').each(function(){
+      renderRepeater($(this));
     });
   });
 })(jQuery);

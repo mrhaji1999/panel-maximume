@@ -61,6 +61,10 @@ class UC_Assets {
                 'testConnectionFailed'  => __('اتصال برقرار نشد. خطا را بررسی کنید.', 'user-cards'),
                 'testSendSuccess'       => __('پیامک تستی با موفقیت ارسال شد.', 'user-cards'),
                 'testSendFailed'        => __('ارسال پیامک تستی با خطا مواجه شد.', 'user-cards'),
+                'selectValue'           => __('-- انتخاب مقدار --', 'user-cards'),
+                'enterValue'            => __('مقدار تستی', 'user-cards'),
+                'removeRow'             => __('حذف', 'user-cards'),
+                'variablePlaceholder'   => __('نام متغیر (مثال: name)', 'user-cards'),
             ],
         ];
 

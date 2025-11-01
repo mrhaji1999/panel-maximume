@@ -88,13 +88,13 @@ class UC_Ajax {
 
         self::check_sms_nonce();
 
-        $gateway = isset($_POST['gateway']) ? sanitize_key(wp_unslash($_POST['gateway'])) : UC_SMS::GATEWAY_PAYAMAK_PANEL;
+        $gateway = isset($_POST['gateway']) ? sanitize_key(wp_unslash($_POST['gateway'])) : UC_SMS::GATEWAY_IPPANEL;
         $username = isset($_POST['username']) ? sanitize_text_field(wp_unslash($_POST['username'])) : '';
         $password = isset($_POST['password']) ? sanitize_text_field(wp_unslash($_POST['password'])) : '';
         $sender   = isset($_POST['sender_number']) ? sanitize_text_field(wp_unslash($_POST['sender_number'])) : '';
 
-        if ($username === '' || $password === '') {
-            wp_send_json_error(['message' => __('نام کاربری و کلمه عبور الزامی است.', 'user-cards')], 400);
+        if ($password === '') {
+            wp_send_json_error(['message' => __('توکن دسترسی الزامی است.', 'user-cards')], 400);
         }
 
         try {
@@ -116,20 +116,20 @@ class UC_Ajax {
 
         self::check_sms_nonce();
 
-        $gateway = isset($_POST['gateway']) ? sanitize_key(wp_unslash($_POST['gateway'])) : UC_SMS::GATEWAY_PAYAMAK_PANEL;
+        $gateway = isset($_POST['gateway']) ? sanitize_key(wp_unslash($_POST['gateway'])) : UC_SMS::GATEWAY_IPPANEL;
         $username = isset($_POST['username']) ? sanitize_text_field(wp_unslash($_POST['username'])) : '';
         $password = isset($_POST['password']) ? sanitize_text_field(wp_unslash($_POST['password'])) : '';
         $sender   = isset($_POST['sender_number']) ? sanitize_text_field(wp_unslash($_POST['sender_number'])) : '';
         $pattern_code_raw = isset($_POST['pattern_code']) ? wp_unslash($_POST['pattern_code']) : '';
         $pattern_code = sanitize_text_field($pattern_code_raw);
         $pattern_vars_raw = isset($_POST['pattern_vars']) ? wp_unslash($_POST['pattern_vars']) : '';
-        $pattern_vars = UC_Settings::sanitize_vars($pattern_vars_raw);
+        $pattern_mappings = UC_Settings::decode_pattern_vars($pattern_vars_raw, true);
         $test_phone_raw = isset($_POST['test_phone']) ? wp_unslash($_POST['test_phone']) : '';
         $test_phone = UC_SMS::sanitize_phone($test_phone_raw);
         $variables_raw = isset($_POST['variables']) ? (string) wp_unslash($_POST['variables']) : '';
 
-        if ($username === '' || $password === '') {
-            wp_send_json_error(['message' => __('نام کاربری و کلمه عبور الزامی است.', 'user-cards')], 400);
+        if ($password === '') {
+            wp_send_json_error(['message' => __('توکن دسترسی الزامی است.', 'user-cards')], 400);
         }
 
         if ($pattern_code === '') {
@@ -140,33 +140,37 @@ class UC_Ajax {
             wp_send_json_error(['message' => __('شماره موبایل تست نامعتبر است.', 'user-cards')], 400);
         }
 
-        $keys = UC_SMS::normalize_pattern_variables($pattern_vars !== '' ? $pattern_vars : UC_SMS::DEFAULT_VARIABLE_ORDER);
-
-        if (empty($keys)) {
-            wp_send_json_error(['message' => __('ترتیب متغیرهای پیامک قابل استفاده نیست.', 'user-cards')], 400);
+        if (empty($pattern_mappings)) {
+            wp_send_json_error(['message' => __('لطفاً نگاشت متغیرها را مشخص کنید.', 'user-cards')], 400);
         }
 
-        $parsed = UC_SMS::parse_manual_variables_input($variables_raw, $keys);
-        $text_variables = [];
-        $has_value = false;
-
-        foreach ($keys as $index => $key) {
-            if (isset($parsed['map'][$key])) {
-                $value = (string) $parsed['map'][$key];
-            } elseif (isset($parsed['ordered'][$index])) {
-                $value = (string) $parsed['ordered'][$index];
-            } else {
-                $value = '';
+        $manual_values = [];
+        if ($variables_raw !== '') {
+            $decoded = json_decode($variables_raw, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $placeholder = isset($row['placeholder']) ? preg_replace('/[^A-Za-z0-9_]/', '', (string) $row['placeholder']) : '';
+                    $value       = isset($row['value']) ? wp_kses_post($row['value']) : '';
+                    if ($placeholder === '') {
+                        continue;
+                    }
+                    $manual_values[$placeholder] = $value;
+                }
             }
-
-            if ($value !== '') {
-                $has_value = true;
-            }
-
-            $text_variables[] = $value;
         }
 
-        if (!$has_value) {
+        $has_non_empty = false;
+        foreach ($manual_values as $manual_value) {
+            if ((string) $manual_value !== '') {
+                $has_non_empty = true;
+                break;
+            }
+        }
+
+        if (!$has_non_empty) {
             wp_send_json_error(['message' => __('برای ارسال تست باید حداقل یک مقدار متغیر وارد شود.', 'user-cards')], 400);
         }
 
@@ -177,9 +181,8 @@ class UC_Ajax {
                 $password,
                 $sender,
                 $pattern_code,
-                $keys,
-                $parsed['map'],
-                $text_variables,
+                $pattern_mappings,
+                $manual_values,
                 $test_phone
             );
 
