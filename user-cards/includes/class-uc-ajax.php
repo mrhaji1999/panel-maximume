@@ -84,6 +84,8 @@ class UC_Ajax {
         $code = isset($_POST['code']) ? preg_replace('/[^A-Za-z0-9_-]/', '', (string) $_POST['code']) : '';
         $date = sanitize_text_field($_POST['date'] ?? '');
         $time = sanitize_text_field($_POST['time'] ?? '');
+        $reservation_date = sanitize_text_field($_POST['reservation_date'] ?? '');
+        $slot_hour = isset($_POST['slot_hour']) ? (int) $_POST['slot_hour'] : null;
         if (!$card_id || !$code || !$date || !$time) {
             wp_send_json_error(['message' => __('اطلاعات ناقص است.', 'user-cards')], 400);
         }
@@ -180,6 +182,14 @@ class UC_Ajax {
         update_post_meta($sub_id, '_uc_time', $time);
         update_post_meta($sub_id, '_uc_surprise', $surprise);
 
+        if (!empty($reservation_date)) {
+            update_post_meta($sub_id, '_uc_reservation_date', $reservation_date);
+        }
+
+        if ($slot_hour !== null) {
+            update_post_meta($sub_id, '_uc_slot_hour', $slot_hour);
+        }
+
         if ($assigned_supervisor > 0) {
             update_post_meta($sub_id, '_uc_supervisor_id', $assigned_supervisor);
         }
@@ -189,9 +199,66 @@ class UC_Ajax {
             update_post_meta($sub_id, '_uc_agent_id', $assigned_agent);
         }
 
+        if (class_exists('UC_SMS')) {
+            $request_context = [
+                'date' => $date,
+                'time' => $time,
+                'reservation_date' => $reservation_date,
+                'slot_hour' => $slot_hour,
+                'card_code' => $code,
+                'form' => self::sanitize_form_context($_POST ?? []),
+            ];
+
+            if (empty($request_context['form']['phone']) && !empty($request_context['form']['mobile'])) {
+                $request_context['phone'] = $request_context['form']['mobile'];
+            } elseif (!empty($request_context['form']['phone'])) {
+                $request_context['phone'] = $request_context['form']['phone'];
+            }
+
+            if (!empty($request_context['form']['name'])) {
+                $request_context['customer_name'] = $request_context['form']['name'];
+            } elseif (!empty($request_context['form']['customer_name'])) {
+                $request_context['customer_name'] = $request_context['form']['customer_name'];
+            }
+
+            UC_SMS::send_submission_confirmation($sub_id, $card_id, $user_id, $surprise, $date, $time, $code, $request_context);
+        }
+
         wp_send_json_success([
             'message' => __('با موفقیت ثبت شد.', 'user-cards'),
             'surprise' => $surprise,
         ]);
+    }
+
+    private static function sanitize_form_context($data) {
+        $clean = [];
+
+        if (!is_array($data)) {
+            return $clean;
+        }
+
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                continue;
+            }
+
+            $clean_key = sanitize_key($key);
+            if ($clean_key === '') {
+                continue;
+            }
+
+            if (is_string($value)) {
+                $value = wp_unslash($value);
+            }
+
+            if ($clean_key === 'code') {
+                $clean[$clean_key] = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $value);
+                continue;
+            }
+
+            $clean[$clean_key] = sanitize_text_field($value);
+        }
+
+        return $clean;
     }
 }
