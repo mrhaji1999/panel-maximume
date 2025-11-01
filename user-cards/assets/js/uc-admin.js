@@ -1,4 +1,24 @@
 (function($){
+  function getText(key, fallback){
+    if (typeof UC_Admin !== 'undefined' && UC_Admin.i18n && UC_Admin.i18n[key]) {
+      return UC_Admin.i18n[key];
+    }
+    return fallback || '';
+  }
+
+  function setStatus($el, type, message){
+    if(!$el || !$el.length) return;
+    var colors = {
+      success: '#1d8102',
+      error: '#a00',
+      loading: '#555'
+    };
+    var color = colors[type] || '';
+    $el.text(message || '');
+    if(color){ $el.css('color', color); }
+    else { $el.css('color', ''); }
+  }
+
   function fetchPosts(pt){
     var $sel = $('#uc_related_post_id');
     $sel.prop('disabled', true).empty().append('<option>Loading…</option>');
@@ -77,5 +97,75 @@
     if ($('#uc-schedule-supervisor').length) {
       showScheduleSection($('#uc-schedule-supervisor').val());
     }
+  });
+
+  $(document).on('click', '#uc_sms_test_connection', function(e){
+    e.preventDefault();
+    if (typeof UC_Admin === 'undefined') return;
+    var $btn = $(this);
+    var $status = $('#uc_sms_test_connection_status');
+    setStatus($status, 'loading', getText('testing', 'در حال بررسی...'));
+    $btn.prop('disabled', true);
+    $.post(UC_Admin.ajax_url, {
+      action: 'uc_sms_test_connection',
+      nonce: UC_Admin.sms_nonce,
+      gateway: $('#uc_sms_gateway').val(),
+      username: $('#uc_sms_username').val(),
+      password: $('#uc_sms_password').val(),
+      sender_number: $('#uc_sms_sender_number').val()
+    }).done(function(res){
+      if(res && res.success){
+        var msg = (res.data && res.data.message) ? res.data.message : getText('testConnectionSuccess', 'اتصال با موفقیت برقرار شد.');
+        setStatus($status, 'success', msg);
+      } else {
+        var msgErr = (res && res.data && res.data.message) ? res.data.message : getText('testConnectionFailed', 'اتصال برقرار نشد. خطا را بررسی کنید.');
+        setStatus($status, 'error', msgErr);
+      }
+    }).fail(function(xhr){
+      var msg = getText('testConnectionFailed', 'اتصال برقرار نشد. خطا را بررسی کنید.');
+      if(xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message){
+        msg = xhr.responseJSON.data.message;
+      }
+      setStatus($status, 'error', msg);
+    }).always(function(){
+      $btn.prop('disabled', false);
+    });
+  });
+
+  $(document).on('click', '#uc_sms_send_test', function(e){
+    e.preventDefault();
+    if (typeof UC_Admin === 'undefined') return;
+    var $btn = $(this);
+    var $status = $('#uc_sms_send_test_status');
+    setStatus($status, 'loading', getText('testing', 'در حال بررسی...'));
+    $btn.prop('disabled', true);
+    $.post(UC_Admin.ajax_url, {
+      action: 'uc_sms_send_test',
+      nonce: UC_Admin.sms_nonce,
+      gateway: $('#uc_sms_gateway').val(),
+      username: $('#uc_sms_username').val(),
+      password: $('#uc_sms_password').val(),
+      sender_number: $('#uc_sms_sender_number').val(),
+      pattern_code: $('#uc_sms_default_pattern_code').val(),
+      pattern_vars: $('#uc_sms_default_pattern_vars').val(),
+      test_phone: $('#uc_sms_test_phone').val(),
+      variables: $('#uc_sms_test_variables').val()
+    }).done(function(res){
+      if(res && res.success){
+        var msg = (res.data && res.data.message) ? res.data.message : getText('testSendSuccess', 'پیامک تستی با موفقیت ارسال شد.');
+        setStatus($status, 'success', msg);
+      } else {
+        var msgErr = (res && res.data && res.data.message) ? res.data.message : getText('testSendFailed', 'ارسال پیامک تستی با خطا مواجه شد.');
+        setStatus($status, 'error', msgErr);
+      }
+    }).fail(function(xhr){
+      var msg = getText('testSendFailed', 'ارسال پیامک تستی با خطا مواجه شد.');
+      if(xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message){
+        msg = xhr.responseJSON.data.message;
+      }
+      setStatus($status, 'error', msg);
+    }).always(function(){
+      $btn.prop('disabled', false);
+    });
   });
 })(jQuery);

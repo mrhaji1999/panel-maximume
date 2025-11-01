@@ -21,10 +21,152 @@ class UC_SMS {
     const SOAP_ACTION = 'http://tempuri.org/SendByBaseNumber';
 
     /** @var string */
+    const SOAP_ACTION_GET_CREDIT = 'http://tempuri.org/GetCredit';
+
+    /** @var string */
     const IRAN_PAYAMAK_PATTERN_ENDPOINT = 'https://rest.iranpayamak.com/api/Pattern/Send';
 
     /** @var string */
     const DEFAULT_VARIABLE_ORDER = 'user_name,card_title,jalali_date,selected_time,surprise_code';
+
+    public static function sanitize_phone($value) {
+        return self::sanitize_phone_value($value);
+    }
+
+    public static function normalize_pattern_variables($pattern_vars) {
+        return self::normalize_pattern_vars($pattern_vars);
+    }
+
+    public static function parse_manual_variables_input($input, array $keys = []) {
+        $input = trim((string) $input);
+        if ($input === '') {
+            return [
+                'map'     => [],
+                'ordered' => [],
+            ];
+        }
+
+        $map = [];
+        $ordered = [];
+        $lines = preg_split('/\r\n|\n|\r/', $input);
+        $has_pairs = false;
+
+        if (is_array($lines)) {
+            foreach ($lines as $line) {
+                $line = trim((string) $line);
+                if ($line === '') {
+                    continue;
+                }
+
+                if (strpos($line, '=') !== false || strpos($line, ':') !== false) {
+                    $delimiter = strpos($line, '=') !== false ? '=' : ':';
+                    [$raw_key, $raw_value] = array_map('trim', explode($delimiter, $line, 2));
+                    $key = sanitize_key($raw_key);
+                    if ($key !== '') {
+                        $map[$key] = $raw_value;
+                        $has_pairs = true;
+                        continue;
+                    }
+                }
+
+                $ordered[] = $line;
+            }
+        }
+
+        if (!$has_pairs && empty($ordered)) {
+            $ordered = array_values(array_filter(array_map('trim', explode(',', $input)), static function ($value) {
+                return $value !== '';
+            }));
+        }
+
+        if (!empty($ordered) && !empty($keys)) {
+            foreach ($keys as $index => $key) {
+                if (isset($map[$key])) {
+                    continue;
+                }
+                if (isset($ordered[$index])) {
+                    $map[$key] = $ordered[$index];
+                }
+            }
+        }
+
+        return [
+            'map'     => $map,
+            'ordered' => array_values($ordered),
+        ];
+    }
+
+    public static function test_connection($gateway, $username, $password, $sender_number = '') {
+        $gateway = sanitize_key((string) $gateway);
+        if (!in_array($gateway, [self::GATEWAY_PAYAMAK_PANEL, self::GATEWAY_IRAN_PAYAMAK], true)) {
+            $gateway = self::GATEWAY_PAYAMAK_PANEL;
+        }
+
+        $username = trim((string) $username);
+        $password = trim((string) $password);
+
+        if ($username === '' || $password === '') {
+            throw new \InvalidArgumentException(__('نام کاربری یا کلمه عبور معتبر نیست.', 'user-cards'));
+        }
+
+        if ($gateway === self::GATEWAY_IRAN_PAYAMAK) {
+            return self::test_with_iran_payamak($username, $password);
+        }
+
+        return self::test_with_payamak_panel($username, $password);
+    }
+
+    public static function send_manual_test($gateway, $username, $password, $sender_number, $pattern_code, array $keys, array $variables_map, array $text_variables, $phone) {
+        $gateway = sanitize_key((string) $gateway);
+        if (!in_array($gateway, [self::GATEWAY_PAYAMAK_PANEL, self::GATEWAY_IRAN_PAYAMAK], true)) {
+            $gateway = self::GATEWAY_PAYAMAK_PANEL;
+        }
+
+        $username = trim((string) $username);
+        $password = trim((string) $password);
+        $pattern_code = trim((string) $pattern_code);
+        $phone = self::sanitize_phone_value($phone);
+        $sender_number = trim((string) $sender_number);
+
+        if ($username === '' || $password === '' || $pattern_code === '' || $phone === '') {
+            throw new \InvalidArgumentException(__('اطلاعات لازم برای ارسال پیامک تستی تکمیل نشده است.', 'user-cards'));
+        }
+
+        $keys = array_values(array_filter(array_map('sanitize_key', $keys)));
+        if (empty($keys)) {
+            throw new \InvalidArgumentException(__('ترتیب متغیرهای پیامک نامعتبر است.', 'user-cards'));
+        }
+
+        $text_variables = array_map('strval', $text_variables);
+
+        if (count($text_variables) < count($keys)) {
+            $text_variables = array_pad($text_variables, count($keys), '');
+        }
+
+        $payload = [
+            'username' => $username,
+            'password' => $password,
+            'text'     => $text_variables,
+            'to'       => $phone,
+            'bodyId'   => is_numeric($pattern_code) ? (int) $pattern_code : $pattern_code,
+        ];
+
+        $context = [
+            'username'       => $username,
+            'password'       => $password,
+            'sender_number'  => $sender_number,
+            'phone'          => $phone,
+            'pattern_code'   => $pattern_code,
+            'variable_keys'  => $keys,
+            'variables_map'  => $variables_map,
+            'text_variables' => $text_variables,
+            'payload'        => $payload,
+        ];
+
+        $response = self::dispatch($gateway, $payload, $context);
+
+        return $response;
+    }
 
     protected static function get_gateway_slug() {
         $gateway = get_option('uc_sms_gateway', self::GATEWAY_PAYAMAK_PANEL);
@@ -305,6 +447,179 @@ class UC_SMS {
         return self::dispatch_with_payamak_panel($payload);
     }
 
+    protected static function test_with_payamak_panel($username, $password) {
+        $credit = null;
+
+        if (class_exists('SoapClient')) {
+            try {
+                $client = new \SoapClient(self::WSDL, [
+                    'encoding' => 'UTF-8',
+                    'exceptions' => true,
+                    'cache_wsdl' => defined('WSDL_CACHE_MEMORY') ? WSDL_CACHE_MEMORY : 1,
+                    'connection_timeout' => 15,
+                ]);
+
+                $response = $client->GetCredit([
+                    'username' => $username,
+                    'password' => $password,
+                ]);
+
+                if (is_object($response) && isset($response->GetCreditResult)) {
+                    $credit = (string) $response->GetCreditResult;
+                } elseif (is_scalar($response)) {
+                    $credit = (string) $response;
+                }
+            } catch (\Throwable $exception) {
+                $credit = null;
+            }
+        }
+
+        if ($credit === null) {
+            if (!function_exists('wp_remote_post')) {
+                throw new \RuntimeException('UC_SMS: wp_remote_post is not available.');
+            }
+
+            $body = self::build_credit_envelope($username, $password);
+            $response = wp_remote_post(self::SERVICE_ENDPOINT, [
+                'headers' => [
+                    'Content-Type' => 'text/xml; charset=utf-8',
+                    'SOAPAction'   => self::SOAP_ACTION_GET_CREDIT,
+                ],
+                'body'    => $body,
+                'timeout' => 20,
+            ]);
+
+            if (is_wp_error($response)) {
+                throw new \RuntimeException('UC_SMS: HTTP transport error - ' . $response->get_error_message());
+            }
+
+            $code = (int) wp_remote_retrieve_response_code($response);
+            $raw_body = (string) wp_remote_retrieve_body($response);
+
+            if ($code < 200 || $code >= 300) {
+                throw new \RuntimeException('UC_SMS: Gateway HTTP status ' . $code);
+            }
+
+            $credit = self::parse_credit_response($raw_body);
+
+            if ($credit === '') {
+                $credit = self::parse_response_value($raw_body);
+            }
+        }
+
+        if ($credit === null || $credit === '') {
+            throw new \RuntimeException(__('پاسخی از درگاه پیامک دریافت نشد.', 'user-cards'));
+        }
+
+        if (is_numeric($credit)) {
+            $numeric = (float) $credit;
+            if ($numeric < 0) {
+                throw new \RuntimeException(__('درگاه پیامک خطا بازگرداند.', 'user-cards'));
+            }
+            $display = $numeric;
+        } else {
+            $display = $credit;
+        }
+
+        return [
+            'gateway' => self::GATEWAY_PAYAMAK_PANEL,
+            'credit'  => $display,
+            'message' => sprintf(__('اتصال برقرار شد. موجودی: %s', 'user-cards'), $display),
+        ];
+    }
+
+    protected static function test_with_iran_payamak($username, $password) {
+        if (!function_exists('wp_remote_post')) {
+            throw new \RuntimeException('UC_SMS: wp_remote_post is not available.');
+        }
+
+        $response = wp_remote_post('https://rest.iranpayamak.com/api/Account/GetCredit', [
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+            'body'    => wp_json_encode([
+                'username' => $username,
+                'password' => $password,
+            ]),
+            'timeout' => 20,
+        ]);
+
+        if (is_wp_error($response)) {
+            throw new \RuntimeException('UC_SMS: IranPayamak transport error - ' . $response->get_error_message());
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+        $raw_body = (string) wp_remote_retrieve_body($response);
+
+        if ($code < 200 || $code >= 300) {
+            throw new \RuntimeException('UC_SMS: IranPayamak HTTP status ' . $code);
+        }
+
+        $data = null;
+        if ($raw_body !== '') {
+            $decoded = json_decode($raw_body, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $data = $decoded;
+            }
+        }
+
+        $success = true;
+        $message = '';
+        $credit = '';
+
+        if (is_array($data)) {
+            if (array_key_exists('status', $data)) {
+                $success = $success && (bool) $data['status'];
+            }
+            if (array_key_exists('Status', $data)) {
+                $success = $success && (bool) $data['Status'];
+            }
+            if (isset($data['code']) && is_numeric($data['code']) && (int) $data['code'] < 0) {
+                $success = false;
+            }
+            if (isset($data['Code']) && is_numeric($data['Code']) && (int) $data['Code'] < 0) {
+                $success = false;
+            }
+            if (isset($data['credit'])) {
+                $credit = (string) $data['credit'];
+            } elseif (isset($data['Credit'])) {
+                $credit = (string) $data['Credit'];
+            } elseif (isset($data['value'])) {
+                $credit = (string) $data['value'];
+            }
+            if (isset($data['message'])) {
+                $message = (string) $data['message'];
+            } elseif (isset($data['Message'])) {
+                $message = (string) $data['Message'];
+            }
+        } else {
+            $credit = $raw_body;
+        }
+
+        if (!$success) {
+            if ($message === '') {
+                $message = __('پاسخی ناموفق از درگاه دریافت شد.', 'user-cards');
+            }
+            throw new \RuntimeException('UC_SMS: IranPayamak error - ' . $message);
+        }
+
+        $display = $credit;
+        if ($display === '' && $message !== '') {
+            $display = $message;
+        }
+
+        $final_message = $display !== ''
+            ? sprintf(__('اتصال برقرار شد. موجودی: %s', 'user-cards'), $display)
+            : __('اتصال با موفقیت برقرار شد.', 'user-cards');
+
+        return [
+            'gateway'  => self::GATEWAY_IRAN_PAYAMAK,
+            'credit'   => $display,
+            'message'  => $final_message,
+            'response' => $data !== null ? $data : $raw_body,
+        ];
+    }
+
     protected static function dispatch_with_payamak_panel(array $payload) {
         if (empty($payload['text']) || !is_array($payload['text'])) {
             throw new \InvalidArgumentException('UC_SMS: Payload text must be an array.');
@@ -546,6 +861,30 @@ class UC_SMS {
         return $result;
     }
 
+    protected static function build_credit_envelope($username, $password) {
+        $escape = static function ($value) {
+            $value = (string) $value;
+
+            if (function_exists('esc_html')) {
+                return esc_html($value);
+            }
+
+            return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        };
+
+        $body = '<?xml version="1.0" encoding="utf-8"?>'
+            . '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+            . '<soap:Body>'
+            . '<GetCredit xmlns="http://tempuri.org/">'
+            . '<username>' . $escape($username) . '</username>'
+            . '<password>' . $escape($password) . '</password>'
+            . '</GetCredit>'
+            . '</soap:Body>'
+            . '</soap:Envelope>';
+
+        return $body;
+    }
+
     protected static function build_soap_envelope(array $payload) {
         $escape = static function ($value) {
             $value = (string) $value;
@@ -576,6 +915,31 @@ class UC_SMS {
             . '</soap:Envelope>';
 
         return $body;
+    }
+
+    protected static function parse_credit_response($body) {
+        if ($body === '') {
+            return '';
+        }
+
+        if (!function_exists('simplexml_load_string')) {
+            return '';
+        }
+
+        $xml = simplexml_load_string($body);
+        if ($xml === false) {
+            return '';
+        }
+
+        $xml->registerXPathNamespace('soap', 'http://schemas.xmlsoap.org/soap/envelope/');
+        $xml->registerXPathNamespace('tns', 'http://tempuri.org/');
+        $nodes = $xml->xpath('//tns:GetCreditResult');
+
+        if (is_array($nodes) && isset($nodes[0])) {
+            return trim((string) $nodes[0]);
+        }
+
+        return '';
     }
 
     protected static function parse_response_value($body) {
