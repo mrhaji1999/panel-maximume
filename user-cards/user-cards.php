@@ -21,6 +21,7 @@ require_once UC_PLUGIN_DIR . 'includes/class-uc-assets.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-shortcodes.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-ajax.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-admin.php';
+require_once UC_PLUGIN_DIR . 'includes/class-uc-sms.php';
 require_once UC_PLUGIN_DIR . 'includes/class-uc-redirects.php';
 
 class UC_Bootstrap {

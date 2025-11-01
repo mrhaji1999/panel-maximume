@@ -434,12 +434,15 @@ class UC_Metaboxes {
         $upsell_vars = get_post_meta($post->ID, '_uc_sms_upsell_pattern_vars', true);
 
         $available_vars = [
-            'user_name' => 'نام مشتری',
-            'user_family' => 'نام خانوادگی مشتری',
-            'user_mobile' => 'موبایل مشتری',
-            'card_title' => 'عنوان کارت',
+            'user_name'     => 'نام مشتری',
+            'user_family'   => 'نام خانوادگی مشتری',
+            'user_mobile'   => 'موبایل مشتری',
+            'card_title'    => 'عنوان کارت',
             'submission_id' => 'شناسه فرم',
-            'upsell_items' => 'لیست خرید افزایشی',
+            'jalali_date'   => 'تاریخ انتخابی (شمسی)',
+            'selected_time' => 'ساعت انتخابی',
+            'surprise_code' => 'کد سوپرایز',
+            'upsell_items'  => 'لیست خرید افزایشی',
         ];
 
         ?>
