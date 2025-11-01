@@ -58,6 +58,8 @@ class UC_Bootstrap {
         add_action('wp_ajax_uc_admin_fetch_posts', ['UC_Metaboxes', 'ajax_fetch_posts']);
         add_action('wp_ajax_uc_import_codes_init', ['UC_Metaboxes', 'ajax_import_init']);
         add_action('wp_ajax_uc_import_codes_batch', ['UC_Metaboxes', 'ajax_import_batch']);
+        add_action('wp_ajax_uc_sms_test_connection', ['UC_Ajax', 'sms_test_connection']);
+        add_action('wp_ajax_uc_sms_send_test', ['UC_Ajax', 'sms_send_test']);
     }
 }
 

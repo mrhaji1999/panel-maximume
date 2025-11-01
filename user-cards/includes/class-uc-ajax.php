@@ -8,6 +8,13 @@ class UC_Ajax {
         }
     }
 
+    private static function check_sms_nonce() {
+        $nonce = isset($_REQUEST['nonce']) ? sanitize_text_field(wp_unslash($_REQUEST['nonce'])) : '';
+        if (empty($nonce) || !wp_verify_nonce($nonce, 'uc_sms_settings')) {
+            wp_send_json_error(['message' => __('Invalid nonce', 'user-cards')], 403);
+        }
+    }
+
     public static function login() {
         self::check_nonce();
         $creds = [
@@ -72,6 +79,125 @@ class UC_Ajax {
         }
 
         wp_send_json_success(['status' => 'ok']);
+    }
+
+    public static function sms_test_connection() {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('دسترسی غیرمجاز.', 'user-cards')], 403);
+        }
+
+        self::check_sms_nonce();
+
+        $gateway = isset($_POST['gateway']) ? sanitize_key(wp_unslash($_POST['gateway'])) : UC_SMS::GATEWAY_IPPANEL;
+        $username = isset($_POST['username']) ? sanitize_text_field(wp_unslash($_POST['username'])) : '';
+        $password = isset($_POST['password']) ? sanitize_text_field(wp_unslash($_POST['password'])) : '';
+        $sender   = isset($_POST['sender_number']) ? sanitize_text_field(wp_unslash($_POST['sender_number'])) : '';
+
+        if ($password === '') {
+            wp_send_json_error(['message' => __('توکن دسترسی الزامی است.', 'user-cards')], 400);
+        }
+
+        try {
+            $result = UC_SMS::test_connection($gateway, $username, $password, $sender);
+            $message = isset($result['message']) ? (string) $result['message'] : __('اتصال با موفقیت برقرار شد.', 'user-cards');
+            wp_send_json_success([
+                'message' => $message,
+                'data'    => $result,
+            ]);
+        } catch (\Throwable $exception) {
+            wp_send_json_error(['message' => $exception->getMessage()], 400);
+        }
+    }
+
+    public static function sms_send_test() {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('دسترسی غیرمجاز.', 'user-cards')], 403);
+        }
+
+        self::check_sms_nonce();
+
+        $gateway = isset($_POST['gateway']) ? sanitize_key(wp_unslash($_POST['gateway'])) : UC_SMS::GATEWAY_IPPANEL;
+        $username = isset($_POST['username']) ? sanitize_text_field(wp_unslash($_POST['username'])) : '';
+        $password = isset($_POST['password']) ? sanitize_text_field(wp_unslash($_POST['password'])) : '';
+        $sender   = isset($_POST['sender_number']) ? sanitize_text_field(wp_unslash($_POST['sender_number'])) : '';
+        $pattern_code_raw = isset($_POST['pattern_code']) ? wp_unslash($_POST['pattern_code']) : '';
+        $pattern_code = sanitize_text_field($pattern_code_raw);
+        $pattern_vars_raw = isset($_POST['pattern_vars']) ? wp_unslash($_POST['pattern_vars']) : '';
+        $pattern_mappings = UC_Settings::decode_pattern_vars($pattern_vars_raw, true);
+        $test_phone_raw = isset($_POST['test_phone']) ? wp_unslash($_POST['test_phone']) : '';
+        $test_phone = UC_SMS::sanitize_phone($test_phone_raw);
+        $variables_raw = isset($_POST['variables']) ? (string) wp_unslash($_POST['variables']) : '';
+
+        if ($password === '') {
+            wp_send_json_error(['message' => __('توکن دسترسی الزامی است.', 'user-cards')], 400);
+        }
+
+        if ($pattern_code === '') {
+            wp_send_json_error(['message' => __('لطفاً کد الگو را وارد کنید.', 'user-cards')], 400);
+        }
+
+        if ($test_phone === '') {
+            wp_send_json_error(['message' => __('شماره موبایل تست نامعتبر است.', 'user-cards')], 400);
+        }
+
+        if (empty($pattern_mappings)) {
+            wp_send_json_error(['message' => __('لطفاً نگاشت متغیرها را مشخص کنید.', 'user-cards')], 400);
+        }
+
+        $manual_values = [];
+        if ($variables_raw !== '') {
+            $decoded = json_decode($variables_raw, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $placeholder = isset($row['placeholder']) ? preg_replace('/[^A-Za-z0-9_]/', '', (string) $row['placeholder']) : '';
+                    $value       = isset($row['value']) ? wp_kses_post($row['value']) : '';
+                    if ($placeholder === '') {
+                        continue;
+                    }
+                    $manual_values[$placeholder] = $value;
+                }
+            }
+        }
+
+        $has_non_empty = false;
+        foreach ($manual_values as $manual_value) {
+            if ((string) $manual_value !== '') {
+                $has_non_empty = true;
+                break;
+            }
+        }
+
+        if (!$has_non_empty) {
+            wp_send_json_error(['message' => __('برای ارسال تست باید حداقل یک مقدار متغیر وارد شود.', 'user-cards')], 400);
+        }
+
+        try {
+            $response = UC_SMS::send_manual_test(
+                $gateway,
+                $username,
+                $password,
+                $sender,
+                $pattern_code,
+                $pattern_mappings,
+                $manual_values,
+                $test_phone
+            );
+
+            $message = __('پیامک تستی با موفقیت ارسال شد.', 'user-cards');
+            if (is_array($response) && isset($response['result']) && $response['result'] !== '') {
+                $message .= ' (' . $response['result'] . ')';
+            }
+
+            wp_send_json_success([
+                'message' => $message,
+                'data'    => $response,
+            ]);
+        } catch (\Throwable $exception) {
+            wp_send_json_error(['message' => $exception->getMessage()], 400);
+        }
     }
 
     public static function submit_form() {

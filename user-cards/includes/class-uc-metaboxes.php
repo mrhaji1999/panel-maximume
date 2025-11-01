@@ -413,13 +413,22 @@ class UC_Metaboxes {
                 '_uc_sms_upsell_pattern_vars',
             ];
             foreach ($fields as $field) {
-                if (isset($_POST[$field])) {
-                    $value = sanitize_text_field($_POST[$field]);
-                    if (!empty($value)) {
-                        update_post_meta($post_id, $field, $value);
-                    } else {
-                        delete_post_meta($post_id, $field);
-                    }
+                if (!isset($_POST[$field])) {
+                    continue;
+                }
+
+                $raw_value = wp_unslash($_POST[$field]);
+
+                if ($field === '_uc_sms_normal_pattern_vars' || $field === '_uc_sms_upsell_pattern_vars') {
+                    $value = UC_Settings::sanitize_vars($raw_value);
+                } else {
+                    $value = sanitize_text_field($raw_value);
+                }
+
+                if ($value !== '') {
+                    update_post_meta($post_id, $field, $value);
+                } else {
+                    delete_post_meta($post_id, $field);
                 }
             }
         }
@@ -430,86 +439,56 @@ class UC_Metaboxes {
 
         $normal_code = get_post_meta($post->ID, '_uc_sms_normal_pattern_code', true);
         $upsell_code = get_post_meta($post->ID, '_uc_sms_upsell_pattern_code', true);
-        $normal_vars = get_post_meta($post->ID, '_uc_sms_normal_pattern_vars', true);
-        $upsell_vars = get_post_meta($post->ID, '_uc_sms_upsell_pattern_vars', true);
+        $normal_vars_raw = get_post_meta($post->ID, '_uc_sms_normal_pattern_vars', true);
+        $upsell_vars_raw = get_post_meta($post->ID, '_uc_sms_upsell_pattern_vars', true);
+        $normal_vars = UC_Settings::decode_pattern_vars($normal_vars_raw, false);
+        $upsell_vars = UC_Settings::decode_pattern_vars($upsell_vars_raw, false);
+        $normal_vars_json = !empty($normal_vars) ? wp_json_encode($normal_vars, JSON_UNESCAPED_UNICODE) : '';
+        $upsell_vars_json = !empty($upsell_vars) ? wp_json_encode($upsell_vars, JSON_UNESCAPED_UNICODE) : '';
 
         $default_code = get_option('uc_sms_default_pattern_code', '');
-        $default_vars = get_option('uc_sms_default_pattern_vars', '');
-
-        $available_vars = [
-            'user_name'     => 'نام مشتری',
-            'user_family'   => 'نام خانوادگی مشتری',
-            'user_mobile'   => 'موبایل مشتری',
-            'card_title'    => 'عنوان کارت',
-            'submission_id' => 'شناسه فرم',
-            'card_code'     => 'کد وارد شده توسط کاربر',
-            'jalali_date'   => 'تاریخ انتخابی (شمسی)',
-            'selected_time' => 'ساعت انتخابی',
-            'surprise_code' => 'کد سوپرایز',
-            'upsell_items'  => 'لیست خرید افزایشی',
-            'gregorian_date' => 'تاریخ انتخابی (میلادی)',
-        ];
+        $available_vars = UC_Settings::available_variables();
+        $available_json = wp_json_encode(array_map(function ($key, $label) {
+            return [
+                'value' => $key,
+                'label' => $label,
+            ];
+        }, array_keys($available_vars), array_values($available_vars)), JSON_UNESCAPED_UNICODE);
+        $default_mapping_json = wp_json_encode(UC_Settings::get_default_pattern_mapping(), JSON_UNESCAPED_UNICODE);
 
         ?>
-        <style>
-            .uc-sms-setting { margin-bottom: 20px; }
-            .uc-sms-setting label { font-weight: bold; display: block; margin-bottom: 5px; }
-            .uc-sms-vars-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-            .uc-sms-var-tag { background: #eee; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
-            .uc-sms-var-tag:hover { background: #ddd; }
-        </style>
-
         <div class="uc-sms-setting">
             <label for="uc_sms_normal_pattern_code">کد قالب پیامک عادی</label>
             <input type="text" id="uc_sms_normal_pattern_code" name="_uc_sms_normal_pattern_code" value="<?php echo esc_attr($normal_code); ?>" class="regular-text" />
             <?php if (!empty($default_code)) : ?>
                 <p class="description"><?php printf(esc_html__('اگر این بخش را خالی بگذارید، مقدار پیش‌فرض %s استفاده می‌شود.', 'user-cards'), '<code>' . esc_html($default_code) . '</code>'); ?></p>
             <?php endif; ?>
-
-            <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
-            <div class="uc-sms-vars-list">
-                <?php foreach ($available_vars as $key => $label) : ?>
-                    <span class="uc-sms-var-tag" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
-                <?php endforeach; ?>
+            <style>
+                .uc-sms-variable-row {display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;}
+                .uc-sms-variable-row input[type="text"], .uc-sms-variable-row select {min-width:160px;}
+                .uc-sms-variable-row .button-link-delete {color:#a00;margin-top:4px;}
+            </style>
+            <label style="margin-top:12px;display:block;">نگاشت متغیرهای این الگو</label>
+            <div class="uc-sms-variables" style="max-width:640px;">
+                <div class="uc-sms-variables-repeater" data-target="uc_sms_normal_pattern_vars" data-mode="mapping" data-available='<?php echo esc_attr($available_json); ?>' data-defaults='<?php echo esc_attr($default_mapping_json); ?>'></div>
+                <input type="hidden" id="uc_sms_normal_pattern_vars" name="_uc_sms_normal_pattern_vars" value="<?php echo esc_attr($normal_vars_json); ?>">
+                <button type="button" class="button uc-sms-variable-add" data-target="uc_sms_normal_pattern_vars"><?php esc_html_e('افزودن متغیر', 'user-cards'); ?></button>
             </div>
-
-            <label for="uc_sms_normal_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
-            <input type="text" id="uc_sms_normal_pattern_vars" name="_uc_sms_normal_pattern_vars" value="<?php echo esc_attr($normal_vars); ?>" class="regular-text" placeholder="مثال: user_name,card_title" />
-            <?php if (!empty($default_vars)) : ?>
-                <p class="description"><?php printf(esc_html__('ترتیب پیش‌فرض متغیرها: %s', 'user-cards'), '<code>' . esc_html($default_vars) . '</code>'); ?></p>
-            <?php endif; ?>
+            <p class="description"><?php esc_html_e('اگر این بخش خالی بماند، نگاشت پیش‌فرض تنظیمات کلی استفاده خواهد شد.', 'user-cards'); ?></p>
         </div>
 
         <div class="uc-sms-setting">
             <label for="uc_sms_upsell_pattern_code">کد قالب پیامک خرید افزایشی</label>
             <input type="text" id="uc_sms_upsell_pattern_code" name="_uc_sms_upsell_pattern_code" value="<?php echo esc_attr($upsell_code); ?>" class="regular-text" />
 
-            <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
-            <div class="uc-sms-vars-list">
-                <?php foreach ($available_vars as $key => $label) : ?>
-                    <span class="uc-sms-var-tag" data-var="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></span>
-                <?php endforeach; ?>
+            <label style="margin-top:12px;display:block;">نگاشت متغیرهای خرید افزایشی</label>
+            <div class="uc-sms-variables" style="max-width:640px;">
+                <div class="uc-sms-variables-repeater" data-target="uc_sms_upsell_pattern_vars" data-mode="mapping" data-available='<?php echo esc_attr($available_json); ?>' data-defaults='<?php echo esc_attr($default_mapping_json); ?>'></div>
+                <input type="hidden" id="uc_sms_upsell_pattern_vars" name="_uc_sms_upsell_pattern_vars" value="<?php echo esc_attr($upsell_vars_json); ?>">
+                <button type="button" class="button uc-sms-variable-add" data-target="uc_sms_upsell_pattern_vars"><?php esc_html_e('افزودن متغیر', 'user-cards'); ?></button>
             </div>
-
-            <label for="uc_sms_upsell_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
-            <input type="text" id="uc_sms_upsell_pattern_vars" name="_uc_sms_upsell_pattern_vars" value="<?php echo esc_attr($upsell_vars); ?>" class="regular-text" placeholder="مثال: user_name,upsell_items" />
+            <p class="description"><?php esc_html_e('در صورت خالی بودن، نگاشت عمومی استفاده می‌شود.', 'user-cards'); ?></p>
         </div>
-
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.uc-sms-var-tag').forEach(function(tag) {
-                tag.addEventListener('click', function() {
-                    const varName = this.getAttribute('data-var');
-                    const input = this.closest('.uc-sms-setting').querySelector('input[type="text"][name$="_vars"]');
-                    if (input.value) {
-                        input.value += ',' + varName;
-                    } else {
-                        input.value = varName;
-                    }
-                });
-            });
-        });
-        </script>
         <?php
     }
 
