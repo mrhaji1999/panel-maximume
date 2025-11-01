@@ -433,13 +433,19 @@ class UC_Metaboxes {
         $normal_vars = get_post_meta($post->ID, '_uc_sms_normal_pattern_vars', true);
         $upsell_vars = get_post_meta($post->ID, '_uc_sms_upsell_pattern_vars', true);
 
+        $default_code = get_option('uc_sms_default_pattern_code', '');
+        $default_vars = get_option('uc_sms_default_pattern_vars', '');
+
         $available_vars = [
-            'user_name' => 'نام مشتری',
-            'user_family' => 'نام خانوادگی مشتری',
-            'user_mobile' => 'موبایل مشتری',
-            'card_title' => 'عنوان کارت',
+            'user_name'     => 'نام مشتری',
+            'user_family'   => 'نام خانوادگی مشتری',
+            'user_mobile'   => 'موبایل مشتری',
+            'card_title'    => 'عنوان کارت',
             'submission_id' => 'شناسه فرم',
-            'upsell_items' => 'لیست خرید افزایشی',
+            'jalali_date'   => 'تاریخ انتخابی (شمسی)',
+            'selected_time' => 'ساعت انتخابی',
+            'surprise_code' => 'کد سوپرایز',
+            'upsell_items'  => 'لیست خرید افزایشی',
         ];
 
         ?>
@@ -454,6 +460,9 @@ class UC_Metaboxes {
         <div class="uc-sms-setting">
             <label for="uc_sms_normal_pattern_code">کد قالب پیامک عادی</label>
             <input type="text" id="uc_sms_normal_pattern_code" name="_uc_sms_normal_pattern_code" value="<?php echo esc_attr($normal_code); ?>" class="regular-text" />
+            <?php if (!empty($default_code)) : ?>
+                <p class="description"><?php printf(esc_html__('اگر این بخش را خالی بگذارید، مقدار پیش‌فرض %s استفاده می‌شود.', 'user-cards'), '<code>' . esc_html($default_code) . '</code>'); ?></p>
+            <?php endif; ?>
 
             <p class="description">متغیرهای قابل استفاده (برای کپی کلیک کنید):</p>
             <div class="uc-sms-vars-list">
@@ -464,6 +473,9 @@ class UC_Metaboxes {
 
             <label for="uc_sms_normal_pattern_vars" style="margin-top:10px;">ترتیب متغیرها (با کاما جدا کنید)</label>
             <input type="text" id="uc_sms_normal_pattern_vars" name="_uc_sms_normal_pattern_vars" value="<?php echo esc_attr($normal_vars); ?>" class="regular-text" placeholder="مثال: user_name,card_title" />
+            <?php if (!empty($default_vars)) : ?>
+                <p class="description"><?php printf(esc_html__('ترتیب پیش‌فرض متغیرها: %s', 'user-cards'), '<code>' . esc_html($default_vars) . '</code>'); ?></p>
+            <?php endif; ?>
         </div>
 
         <div class="uc-sms-setting">
