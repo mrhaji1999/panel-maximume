@@ -189,6 +189,10 @@ class UC_Ajax {
             update_post_meta($sub_id, '_uc_agent_id', $assigned_agent);
         }
 
+        if (class_exists('UC_SMS')) {
+            UC_SMS::send_submission_confirmation($sub_id, $card_id, $user_id, $surprise, $date, $time);
+        }
+
         wp_send_json_success([
             'message' => __('با موفقیت ثبت شد.', 'user-cards'),
             'surprise' => $surprise,
