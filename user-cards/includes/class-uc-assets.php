@@ -24,7 +24,10 @@ class UC_Assets {
     public static function admin($hook) {
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         $is_card = $screen && isset($screen->post_type) && $screen->post_type === 'uc_card';
-        if (($hook === 'post-new.php' || $hook === 'post.php') && $is_card) {
+        $is_card_edit = ($hook === 'post-new.php' || $hook === 'post.php') && $is_card;
+        $is_sms_settings = ($hook === 'user-cards_page_uc-sms-settings');
+
+        if ($is_card_edit) {
             wp_register_style(
                 'uc-admin',
                 UC_PLUGIN_URL . 'assets/css/uc-admin.css',
@@ -32,7 +35,13 @@ class UC_Assets {
                 self::asset_version('assets/css/uc-admin.css')
             );
             wp_enqueue_style('uc-admin');
+        }
 
+        if (!$is_card_edit && !$is_sms_settings) {
+            return;
+        }
+
+        if (!wp_script_is('uc-admin', 'registered')) {
             wp_register_script(
                 'uc-admin',
                 UC_PLUGIN_URL . 'assets/js/uc-admin.js',
@@ -40,12 +49,23 @@ class UC_Assets {
                 self::asset_version('assets/js/uc-admin.js'),
                 true
             );
-            wp_localize_script('uc-admin', 'UC_Admin', [
-                'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('uc_codes_admin'),
-            ]);
-            wp_enqueue_script('uc-admin');
         }
+
+        $localize = [
+            'ajax_url'  => admin_url('admin-ajax.php'),
+            'nonce'     => wp_create_nonce('uc_codes_admin'),
+            'sms_nonce' => wp_create_nonce('uc_sms_settings'),
+            'i18n'      => [
+                'testing'               => __('در حال بررسی...', 'user-cards'),
+                'testConnectionSuccess' => __('اتصال با موفقیت برقرار شد.', 'user-cards'),
+                'testConnectionFailed'  => __('اتصال برقرار نشد. خطا را بررسی کنید.', 'user-cards'),
+                'testSendSuccess'       => __('پیامک تستی با موفقیت ارسال شد.', 'user-cards'),
+                'testSendFailed'        => __('ارسال پیامک تستی با خطا مواجه شد.', 'user-cards'),
+            ],
+        ];
+
+        wp_localize_script('uc-admin', 'UC_Admin', $localize);
+        wp_enqueue_script('uc-admin');
     }
 
     public static function frontend() {
